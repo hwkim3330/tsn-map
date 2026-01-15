@@ -1,8 +1,11 @@
 use std::sync::Arc;
 use std::path::PathBuf;
 use axum::{
-    extract::{State, Query},
+    extract::{State, Query, Multipart},
     response::sse::{Event, Sse},
+    response::IntoResponse,
+    http::{header, StatusCode},
+    body::Body,
     Json,
 };
 use futures::stream::Stream;
@@ -305,4 +308,87 @@ pub async fn set_interface(
         Ok(_) => Json(ApiResponse::success(format!("Interface set to {}", request.interface))),
         Err(e) => Json(ApiResponse::error(&format!("Failed to set interface: {}", e))),
     }
+}
+
+// POST /api/pcap/download - Download captured packets as PCAP file
+pub async fn download_pcap(
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    let capture = state.capture_manager.read().await;
+    let packets = capture.get_packets(0, capture.get_packet_count());
+    drop(capture);
+
+    if packets.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            [(header::CONTENT_TYPE, "application/json")],
+            Body::from(r#"{"error": "No packets to download"}"#),
+        ).into_response();
+    }
+
+    // Create PCAP in memory
+    match PcapHandler::save_pcap_to_bytes(&packets) {
+        Ok(bytes) => {
+            let headers = [
+                (header::CONTENT_TYPE, "application/vnd.tcpdump.pcap"),
+                (header::CONTENT_DISPOSITION, "attachment; filename=\"capture.pcap\""),
+            ];
+            (StatusCode::OK, headers, Body::from(bytes)).into_response()
+        }
+        Err(e) => {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                [(header::CONTENT_TYPE, "application/json")],
+                Body::from(format!(r#"{{"error": "{}"}}"#, e)),
+            ).into_response()
+        }
+    }
+}
+
+// POST /api/pcap/upload - Upload and load PCAP file
+pub async fn upload_pcap(
+    State(state): State<Arc<AppState>>,
+    mut multipart: Multipart,
+) -> Json<ApiResponse<LoadPcapResponse>> {
+    while let Ok(Some(field)) = multipart.next_field().await {
+        let name = field.name().unwrap_or("").to_string();
+        if name == "file" {
+            let filename = field.file_name().unwrap_or("upload.pcap").to_string();
+
+            match field.bytes().await {
+                Ok(data) => {
+                    match PcapHandler::load_pcap_from_bytes(&data) {
+                        Ok(packets) => {
+                            let count = packets.len();
+                            let mut capture = state.capture_manager.write().await;
+                            capture.clear_packets();
+
+                            // Also update topology from loaded packets
+                            let mut topology = state.topology_manager.write().await;
+                            topology.clear();
+
+                            for packet in packets {
+                                topology.process_packet(&packet);
+                                capture.add_packet(packet);
+                            }
+
+                            return Json(ApiResponse::success(LoadPcapResponse {
+                                success: true,
+                                filename,
+                                packets_loaded: count,
+                            }));
+                        }
+                        Err(e) => {
+                            return Json(ApiResponse::error(&format!("Failed to parse pcap: {}", e)));
+                        }
+                    }
+                }
+                Err(e) => {
+                    return Json(ApiResponse::error(&format!("Failed to read file: {}", e)));
+                }
+            }
+        }
+    }
+
+    Json(ApiResponse::error("No file provided"))
 }

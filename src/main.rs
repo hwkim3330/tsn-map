@@ -190,6 +190,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/tsn/streams", get(api::handlers::get_tsn_streams))
         .route("/api/pcap/save", post(api::handlers::save_pcap))
         .route("/api/pcap/load", post(api::handlers::load_pcap))
+        .route("/api/pcap/download", post(api::handlers::download_pcap))
+        .route("/api/pcap/upload", post(api::handlers::upload_pcap))
         .route("/api/interfaces", get(api::handlers::list_interfaces))
         .route("/api/interface/set", post(api::handlers::set_interface))
         // Static files (web frontend)

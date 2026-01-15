@@ -1,10 +1,14 @@
-# TSN-Map
+# NetMap
 
-**TSN Network Visualization and Analysis Tool**
+<p align="center">
+  <img src="web/img/keti-logo.png" alt="KETI Logo" height="60">
+</p>
 
-A real-time network packet capture and visualization tool focused on Time-Sensitive Networking (TSN). Combines features inspired by Wireshark (packet analysis) and nmap (network topology discovery).
+**실시간 네트워크 패킷 캡처 및 시각화 도구**
 
-![TSN-Map](https://img.shields.io/badge/TSN-Map-00d4aa?style=for-the-badge)
+Wireshark와 nmap의 기능을 결합한 웹 기반 네트워크 분석 도구입니다.
+
+![NetMap](https://img.shields.io/badge/NetMap-2f81f7?style=for-the-badge)
 ![Rust](https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)
 
@@ -109,22 +113,37 @@ tsn-map/
     └── js/app.js
 ```
 
+## Filter Syntax
+
+```
+tcp                    # TCP 패킷만
+udp                    # UDP 패킷만
+arp                    # ARP 패킷만
+icmp                   # ICMP 패킷만
+dns                    # DNS 패킷 (포트 53)
+http                   # HTTP 패킷 (포트 80)
+https                  # HTTPS 패킷 (포트 443)
+ip.addr==192.168.1.1   # 특정 IP 주소
+ip.src==10.0.0.1       # 출발지 IP
+ip.dst==10.0.0.1       # 목적지 IP
+port==443              # 특정 포트
+```
+
 ## API Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/status` | GET | Server status |
-| `/api/capture/start` | POST | Start capture |
-| `/api/capture/stop` | POST | Stop capture |
-| `/api/capture/stats` | GET | Capture statistics |
-| `/api/packets` | GET | Get captured packets |
-| `/api/packets/stream` | GET | SSE packet stream |
-| `/api/topology` | GET | Network topology |
-| `/api/tsn/flows` | GET | TSN flow information |
-| `/api/tsn/streams` | GET | TSN stream information |
-| `/api/pcap/save` | POST | Save to PCAP file |
-| `/api/pcap/load` | POST | Load PCAP file |
-| `/api/interfaces` | GET | List network interfaces |
+| `/api/status` | GET | 서버 상태 |
+| `/api/capture/start` | POST | 캡처 시작 |
+| `/api/capture/stop` | POST | 캡처 중지 |
+| `/api/capture/stats` | GET | 캡처 통계 |
+| `/api/packets` | GET | 패킷 목록 |
+| `/api/packets/stream` | GET | SSE 실시간 스트림 |
+| `/api/topology` | GET | 네트워크 토폴로지 |
+| `/api/pcap/upload` | POST | PCAP 파일 업로드 |
+| `/api/pcap/download` | POST | PCAP 파일 다운로드 |
+| `/api/interfaces` | GET | 인터페이스 목록 |
+| `/api/interface/set` | POST | 인터페이스 변경 |
 
 ## TSN Protocol Support
 

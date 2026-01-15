@@ -135,6 +135,108 @@ impl PcapHandler {
         Ok(packets)
     }
 
+    /// Save packets to bytes (in-memory pcap)
+    pub fn save_pcap_to_bytes(
+        packets: &[CapturedPacket],
+    ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+        let mut buffer = Vec::new();
+
+        // Write pcap global header
+        buffer.extend_from_slice(&PCAP_MAGIC.to_le_bytes());
+        buffer.extend_from_slice(&PCAP_VERSION_MAJOR.to_le_bytes());
+        buffer.extend_from_slice(&PCAP_VERSION_MINOR.to_le_bytes());
+        buffer.extend_from_slice(&PCAP_THISZONE.to_le_bytes());
+        buffer.extend_from_slice(&PCAP_SIGFIGS.to_le_bytes());
+        buffer.extend_from_slice(&PCAP_SNAPLEN.to_le_bytes());
+        buffer.extend_from_slice(&PCAP_LINKTYPE_ETHERNET.to_le_bytes());
+
+        for packet in packets {
+            // Write packet header
+            let ts_sec = packet.timestamp.timestamp() as u32;
+            let ts_usec = packet.timestamp.timestamp_subsec_micros();
+            let incl_len = packet.data.len() as u32;
+            let orig_len = packet.length;
+
+            buffer.extend_from_slice(&ts_sec.to_le_bytes());
+            buffer.extend_from_slice(&ts_usec.to_le_bytes());
+            buffer.extend_from_slice(&incl_len.to_le_bytes());
+            buffer.extend_from_slice(&orig_len.to_le_bytes());
+
+            // Write packet data
+            buffer.extend_from_slice(&packet.data);
+        }
+
+        Ok(buffer)
+    }
+
+    /// Load packets from bytes (in-memory pcap)
+    pub fn load_pcap_from_bytes(
+        data: &[u8],
+    ) -> Result<Vec<CapturedPacket>, Box<dyn std::error::Error + Send + Sync>> {
+        if data.len() < 24 {
+            return Err("Invalid pcap file: too short".into());
+        }
+
+        // Read and validate magic number
+        let magic = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
+        let (is_swapped, is_nano) = match magic {
+            0xa1b2c3d4 => (false, false),
+            0xd4c3b2a1 => (true, false),
+            0xa1b23c4d => (false, true),
+            0x4d3cb2a1 => (true, true),
+            _ => return Err(format!("Invalid pcap magic number: 0x{:08X}", magic).into()),
+        };
+
+        let mut offset = 24;
+        let mut packets = Vec::new();
+        let mut packet_id = 0u64;
+
+        while offset + 16 <= data.len() {
+            let ts_sec = if is_swapped {
+                u32::from_be_bytes([data[offset], data[offset + 1], data[offset + 2], data[offset + 3]])
+            } else {
+                u32::from_le_bytes([data[offset], data[offset + 1], data[offset + 2], data[offset + 3]])
+            };
+
+            let ts_sub = if is_swapped {
+                u32::from_be_bytes([data[offset + 4], data[offset + 5], data[offset + 6], data[offset + 7]])
+            } else {
+                u32::from_le_bytes([data[offset + 4], data[offset + 5], data[offset + 6], data[offset + 7]])
+            };
+
+            let incl_len = if is_swapped {
+                u32::from_be_bytes([data[offset + 8], data[offset + 9], data[offset + 10], data[offset + 11]])
+            } else {
+                u32::from_le_bytes([data[offset + 8], data[offset + 9], data[offset + 10], data[offset + 11]])
+            };
+
+            let orig_len = if is_swapped {
+                u32::from_be_bytes([data[offset + 12], data[offset + 13], data[offset + 14], data[offset + 15]])
+            } else {
+                u32::from_le_bytes([data[offset + 12], data[offset + 13], data[offset + 14], data[offset + 15]])
+            };
+
+            offset += 16;
+
+            if offset + incl_len as usize > data.len() {
+                break;
+            }
+
+            let pkt_data = data[offset..offset + incl_len as usize].to_vec();
+            offset += incl_len as usize;
+
+            let nanos = if is_nano { ts_sub } else { ts_sub * 1000 };
+            let timestamp = Utc.timestamp_opt(ts_sec as i64, nanos).unwrap();
+
+            let mut packet = CapturedPacket::from_raw(packet_id, &pkt_data, timestamp);
+            packet.length = orig_len;
+            packets.push(packet);
+            packet_id += 1;
+        }
+
+        Ok(packets)
+    }
+
     /// Export packets to CSV format
     pub fn export_csv(
         packets: &[CapturedPacket],

@@ -73,6 +73,7 @@ function setupEventListeners() {
     document.getElementById('btn-save').addEventListener('click', savePcap);
     document.getElementById('btn-load').addEventListener('click', loadPcap);
     document.getElementById('btn-export-csv').addEventListener('click', exportCSV);
+    document.getElementById('pcap-file-input').addEventListener('change', handlePcapFileSelect);
 
     // Interface selection
     document.getElementById('interface-name').addEventListener('click', showInterfaceModal);
@@ -1100,31 +1101,88 @@ async function selectInterface(name) {
 
 // File Operations
 async function savePcap() {
-    const filename = prompt('파일명 입력:', `capture_${Date.now()}.pcap`);
-    if (!filename) return;
+    if (state.packets.length === 0) {
+        showNotification('저장할 패킷이 없습니다', 'error');
+        return;
+    }
 
-    const result = await apiCall('/api/pcap/save', 'POST', { filename });
-    if (result && result.success) {
-        document.getElementById('capture-file').textContent = filename;
-        alert(`${result.data.packets_saved}개 패킷이 ${filename}에 저장되었습니다`);
-    } else {
-        alert('PCAP 저장 실패');
+    try {
+        const response = await fetch('/api/pcap/download', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (response.ok) {
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            a.href = url;
+            a.download = `capture_${timestamp}.pcap`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showNotification(`${state.packets.length}개 패킷 저장됨`, 'success');
+        } else {
+            showNotification('PCAP 저장 실패', 'error');
+        }
+    } catch (error) {
+        console.error('Save error:', error);
+        showNotification('PCAP 저장 실패', 'error');
     }
 }
 
-async function loadPcap() {
-    const filename = prompt('불러올 PCAP 파일명:');
-    if (!filename) return;
+function loadPcap() {
+    document.getElementById('pcap-file-input').click();
+}
 
-    clearAll();
-    const result = await apiCall('/api/pcap/load', 'POST', { filename });
-    if (result && result.success) {
-        document.getElementById('capture-file').textContent = filename;
-        await loadPackets();
-        alert(`${result.data.packets_loaded}개 패킷을 불러왔습니다`);
-    } else {
-        alert('PCAP 로드 실패');
+async function handlePcapFileSelect(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        showNotification('파일 로딩 중...', 'info');
+        const response = await fetch('/api/pcap/upload', {
+            method: 'POST',
+            body: formData
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+                clearAll();
+                document.getElementById('capture-file').textContent = file.name;
+                await loadPackets();
+                showNotification(`${result.data.packets_loaded}개 패킷 로드됨`, 'success');
+            }
+        } else {
+            showNotification('PCAP 로드 실패', 'error');
+        }
+    } catch (error) {
+        console.error('Load error:', error);
+        showNotification('PCAP 로드 실패', 'error');
     }
+
+    // Reset file input
+    event.target.value = '';
+}
+
+function showNotification(message, type = 'info') {
+    // Remove existing notification
+    const existing = document.querySelector('.notification');
+    if (existing) existing.remove();
+
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.textContent = message;
+    document.body.appendChild(notification);
+
+    // Auto remove after 3 seconds
+    setTimeout(() => notification.remove(), 3000);
 }
 
 function exportCSV() {
