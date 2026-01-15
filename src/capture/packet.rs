@@ -148,21 +148,55 @@ impl CapturedPacket {
             data[6], data[7], data[8], data[9], data[10], data[11]
         );
 
-        // Parse EtherType (handle VLAN tags)
+        // Parse EtherType or Length (IEEE 802.3 vs Ethernet II)
         let mut offset = 12;
-        let mut ethertype = u16::from_be_bytes([data[offset], data[offset + 1]]);
+        let mut eth_type_or_len = u16::from_be_bytes([data[offset], data[offset + 1]]);
 
         // Check for VLAN tag (0x8100)
-        if ethertype == 0x8100 && data.len() >= 18 {
+        if eth_type_or_len == 0x8100 && data.len() >= 18 {
             let tci = u16::from_be_bytes([data[14], data[15]]);
             info.vlan_id = Some(tci & 0x0FFF);
             info.vlan_pcp = Some((tci >> 13) as u8);
             offset = 16;
-            ethertype = u16::from_be_bytes([data[offset], data[offset + 1]]);
+            eth_type_or_len = u16::from_be_bytes([data[offset], data[offset + 1]]);
         }
+
+        // IEEE 802.3 vs Ethernet II detection
+        // If value <= 1500 (0x05DC), it's a Length field (IEEE 802.3)
+        // If value >= 1536 (0x0600), it's an EtherType (Ethernet II)
+        let ethertype = if eth_type_or_len <= 1500 {
+            // IEEE 802.3 frame with LLC header
+            // LLC header: DSAP (1) + SSAP (1) + Control (1-2)
+            let llc_offset = offset + 2;
+            if data.len() >= llc_offset + 3 {
+                let dsap = data[llc_offset];
+                let ssap = data[llc_offset + 1];
+
+                // SNAP: DSAP=0xAA, SSAP=0xAA
+                if dsap == 0xAA && ssap == 0xAA && data.len() >= llc_offset + 8 {
+                    // SNAP header: OUI (3) + EtherType (2)
+                    u16::from_be_bytes([data[llc_offset + 6], data[llc_offset + 7]])
+                } else if dsap == 0x42 && ssap == 0x42 {
+                    // STP (Spanning Tree Protocol)
+                    0x0026  // Use custom marker for STP
+                } else if dsap == 0xFE && ssap == 0xFE {
+                    // OSI protocols
+                    0x00FE
+                } else {
+                    // Generic LLC - mark as 802.3
+                    0x0001  // Custom marker for raw 802.3
+                }
+            } else {
+                0x0001
+            }
+        } else {
+            eth_type_or_len
+        };
 
         info.ethertype = ethertype;
         info.ethertype_name = match ethertype {
+            0x0001 => "802.3".to_string(),       // Raw IEEE 802.3 LLC
+            0x0026 => "STP".to_string(),         // Spanning Tree Protocol
             0x0800 => "IPv4".to_string(),
             0x0806 => "ARP".to_string(),
             0x86DD => "IPv6".to_string(),
