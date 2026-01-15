@@ -120,11 +120,19 @@ pub async fn get_status(
 pub async fn start_capture(
     State(state): State<Arc<AppState>>,
 ) -> Json<ApiResponse<String>> {
-    let mut capture = state.capture_manager.write().await;
+    use std::sync::atomic::Ordering;
 
+    // Set the capture flag
+    state.is_capturing.store(true, Ordering::SeqCst);
+
+    // Also update capture manager state
+    let mut capture = state.capture_manager.write().await;
     match capture.start_capture() {
         Ok(_) => Json(ApiResponse::success("Capture started".to_string())),
-        Err(e) => Json(ApiResponse::error(&format!("Failed to start capture: {}", e))),
+        Err(e) => {
+            state.is_capturing.store(false, Ordering::SeqCst);
+            Json(ApiResponse::error(&format!("Failed to start capture: {}", e)))
+        }
     }
 }
 
@@ -132,6 +140,11 @@ pub async fn start_capture(
 pub async fn stop_capture(
     State(state): State<Arc<AppState>>,
 ) -> Json<ApiResponse<String>> {
+    use std::sync::atomic::Ordering;
+
+    // Clear the capture flag
+    state.is_capturing.store(false, Ordering::SeqCst);
+
     let mut capture = state.capture_manager.write().await;
     capture.stop_capture();
     Json(ApiResponse::success("Capture stopped".to_string()))

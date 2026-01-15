@@ -4,6 +4,7 @@ mod topology;
 mod api;
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use axum::{
     routing::{get, post},
     Router,
@@ -14,8 +15,10 @@ use tower_http::trace::TraceLayer;
 use tokio::sync::RwLock;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use clap::Parser;
+use pcap::{Capture, Device};
+use chrono::Utc;
 
-use crate::capture::CaptureManager;
+use crate::capture::{CaptureManager, CapturedPacket};
 use crate::topology::TopologyManager;
 
 #[derive(Parser, Debug)]
@@ -43,6 +46,103 @@ pub struct AppState {
     pub capture_manager: RwLock<CaptureManager>,
     pub topology_manager: RwLock<TopologyManager>,
     pub interface: String,
+    pub is_capturing: Arc<AtomicBool>,
+    pub buffer_size: usize,
+}
+
+async fn capture_worker(
+    state: Arc<AppState>,
+) {
+    let mut packet_id: u64 = 0;
+
+    loop {
+        // Wait until capturing is enabled
+        while !state.is_capturing.load(Ordering::SeqCst) {
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        }
+
+        // Get current interface
+        let interface = {
+            let cm = state.capture_manager.read().await;
+            cm.get_interface().to_string()
+        };
+
+        tracing::info!("Starting packet capture on {}", interface);
+
+        // Open capture
+        let device = match Device::list() {
+            Ok(devices) => devices.into_iter().find(|d| d.name == interface),
+            Err(e) => {
+                tracing::error!("Failed to list devices: {}", e);
+                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                continue;
+            }
+        };
+
+        let device = match device {
+            Some(d) => d,
+            None => {
+                tracing::error!("Interface {} not found", interface);
+                state.is_capturing.store(false, Ordering::SeqCst);
+                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                continue;
+            }
+        };
+
+        let mut cap = match Capture::from_device(device)
+            .map(|c| c.promisc(true))
+            .map(|c| c.snaplen(65535))
+            .map(|c| c.buffer_size(state.buffer_size as i32))
+            .map(|c| c.timeout(100))
+            .and_then(|c| c.open())
+        {
+            Ok(c) => c,
+            Err(e) => {
+                tracing::error!("Failed to open capture: {}", e);
+                state.is_capturing.store(false, Ordering::SeqCst);
+                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                continue;
+            }
+        };
+
+        tracing::info!("Capture started on {}", interface);
+
+        // Capture loop
+        while state.is_capturing.load(Ordering::SeqCst) {
+            match cap.next_packet() {
+                Ok(packet) => {
+                    let captured = CapturedPacket::from_raw(
+                        packet_id,
+                        packet.data,
+                        Utc::now(),
+                    );
+                    packet_id += 1;
+
+                    // Update topology
+                    {
+                        let mut tm = state.topology_manager.write().await;
+                        tm.process_packet(&captured);
+                    }
+
+                    // Add to capture manager
+                    {
+                        let mut cm = state.capture_manager.write().await;
+                        cm.add_packet(captured);
+                    }
+                }
+                Err(pcap::Error::TimeoutExpired) => {
+                    // Normal timeout, continue
+                    continue;
+                }
+                Err(e) => {
+                    tracing::warn!("Capture error: {}", e);
+                    break;
+                }
+            }
+        }
+
+        tracing::info!("Capture stopped");
+    }
 }
 
 #[tokio::main]
@@ -50,7 +150,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize tracing
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::new(
-            std::env::var("RUST_LOG").unwrap_or_else(|_| "tsn_map=debug,tower_http=debug".into()),
+            std::env::var("RUST_LOG").unwrap_or_else(|_| "tsn_map=info,tower_http=info".into()),
         ))
         .with(tracing_subscriber::fmt::layer())
         .init();
@@ -65,6 +165,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         capture_manager: RwLock::new(CaptureManager::new(&args.interface, args.buffer_size)?),
         topology_manager: RwLock::new(TopologyManager::new()),
         interface: args.interface.clone(),
+        is_capturing: Arc::new(AtomicBool::new(false)),
+        buffer_size: args.buffer_size * 1024 * 1024,
+    });
+
+    // Spawn capture worker
+    let capture_state = state.clone();
+    tokio::spawn(async move {
+        capture_worker(capture_state).await;
     });
 
     // Build router
