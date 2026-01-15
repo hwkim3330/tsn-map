@@ -1027,6 +1027,78 @@ body {
     }
 }
 
+/* Loading Spinner */
+.loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(13, 17, 23, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid var(--border-color);
+    border-top-color: var(--accent-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Button loading state */
+.btn.loading {
+    position: relative;
+    color: transparent !important;
+    pointer-events: none;
+}
+
+.btn.loading::after {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    top: 50%;
+    left: 50%;
+    margin-top: -8px;
+    margin-left: -8px;
+    border: 2px solid transparent;
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+}
+
+/* Keyboard shortcuts hint */
+.shortcuts-hint {
+    position: fixed;
+    bottom: 50px;
+    right: 20px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 0.8em;
+    color: var(--text-secondary);
+    z-index: 1000;
+    opacity: 0.9;
+}
+
+.shortcuts-hint kbd {
+    background: var(--bg-secondary);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: monospace;
+    margin-right: 4px;
+}
+
 /* Responsive */
 @media (max-width: 1200px) {
     .stats-grid-2x2 {

@@ -26,6 +26,31 @@ pub struct PacketInfo {
     pub dst_port: Option<u16>,
     pub is_ptp: bool,
     pub is_tsn: bool,
+    // TCP specific
+    pub tcp_flags: Option<TcpFlags>,
+    pub seq_num: Option<u32>,
+    pub ack_num: Option<u32>,
+    pub window_size: Option<u16>,
+    // ICMP specific
+    pub icmp_type: Option<u8>,
+    pub icmp_code: Option<u8>,
+    // ARP specific
+    pub arp_op: Option<u16>,
+    // IP specific
+    pub ttl: Option<u8>,
+    pub ip_id: Option<u16>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TcpFlags {
+    pub fin: bool,
+    pub syn: bool,
+    pub rst: bool,
+    pub psh: bool,
+    pub ack: bool,
+    pub urg: bool,
+    pub ece: bool,
+    pub cwr: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -98,6 +123,15 @@ impl CapturedPacket {
             dst_port: None,
             is_ptp: false,
             is_tsn: false,
+            tcp_flags: None,
+            seq_num: None,
+            ack_num: None,
+            window_size: None,
+            icmp_type: None,
+            icmp_code: None,
+            arp_op: None,
+            ttl: None,
+            ip_id: None,
         };
 
         if data.len() < 14 {
@@ -159,10 +193,28 @@ impl CapturedPacket {
         // Check for PTP
         info.is_ptp = ethertype == 0x88F7 || Self::is_ptp_udp(data, offset + 2);
 
-        // Parse IP layer manually
+        // Parse ARP
         let ip_offset = offset + 2;
+        if ethertype == 0x0806 && data.len() >= ip_offset + 8 {
+            // ARP operation: offset 6-7 in ARP header
+            info.arp_op = Some(u16::from_be_bytes([data[ip_offset + 6], data[ip_offset + 7]]));
+            // ARP sender IP (offset 14) and target IP (offset 24)
+            if data.len() >= ip_offset + 28 {
+                info.src_ip = Some(format!("{}.{}.{}.{}",
+                    data[ip_offset + 14], data[ip_offset + 15],
+                    data[ip_offset + 16], data[ip_offset + 17]));
+                info.dst_ip = Some(format!("{}.{}.{}.{}",
+                    data[ip_offset + 24], data[ip_offset + 25],
+                    data[ip_offset + 26], data[ip_offset + 27]));
+            }
+        }
+
+        // Parse IP layer
         if ethertype == 0x0800 && data.len() >= ip_offset + 20 {
-            // IPv4
+            // IPv4 header fields
+            info.ttl = Some(data[ip_offset + 8]);
+            info.ip_id = Some(u16::from_be_bytes([data[ip_offset + 4], data[ip_offset + 5]]));
+
             info.src_ip = Some(format!("{}.{}.{}.{}",
                 data[ip_offset + 12], data[ip_offset + 13],
                 data[ip_offset + 14], data[ip_offset + 15]));
@@ -172,44 +224,77 @@ impl CapturedPacket {
 
             let protocol = data[ip_offset + 9];
             info.protocol = Some(match protocol {
-                0 => "HOPOPT".to_string(),       // IPv6 Hop-by-Hop Option
+                0 => "HOPOPT".to_string(),
                 1 => "ICMP".to_string(),
-                2 => "IGMP".to_string(),         // Internet Group Management Protocol
-                4 => "IP-in-IP".to_string(),     // IP encapsulation
+                2 => "IGMP".to_string(),
+                4 => "IP-in-IP".to_string(),
                 6 => "TCP".to_string(),
                 17 => "UDP".to_string(),
-                41 => "IPv6".to_string(),        // IPv6 encapsulation
-                43 => "IPv6-Route".to_string(),  // IPv6 Routing Header
-                44 => "IPv6-Frag".to_string(),   // IPv6 Fragment Header
-                47 => "GRE".to_string(),         // Generic Routing Encapsulation
-                50 => "ESP".to_string(),         // Encapsulating Security Payload
-                51 => "AH".to_string(),          // Authentication Header
+                41 => "IPv6".to_string(),
+                43 => "IPv6-Route".to_string(),
+                44 => "IPv6-Frag".to_string(),
+                47 => "GRE".to_string(),
+                50 => "ESP".to_string(),
+                51 => "AH".to_string(),
                 58 => "ICMPv6".to_string(),
-                59 => "IPv6-NoNxt".to_string(),  // IPv6 No Next Header
-                60 => "IPv6-Opts".to_string(),   // IPv6 Destination Options
-                88 => "EIGRP".to_string(),       // Enhanced Interior Gateway Routing Protocol
-                89 => "OSPF".to_string(),        // Open Shortest Path First
-                103 => "PIM".to_string(),        // Protocol Independent Multicast
-                112 => "VRRP".to_string(),       // Virtual Router Redundancy Protocol
-                132 => "SCTP".to_string(),       // Stream Control Transmission Protocol
+                59 => "IPv6-NoNxt".to_string(),
+                60 => "IPv6-Opts".to_string(),
+                88 => "EIGRP".to_string(),
+                89 => "OSPF".to_string(),
+                103 => "PIM".to_string(),
+                112 => "VRRP".to_string(),
+                132 => "SCTP".to_string(),
                 _ => format!("Proto({})", protocol),
             });
 
-            // Parse transport layer
             let ihl = (data[ip_offset] & 0x0F) as usize * 4;
             let transport_offset = ip_offset + ihl;
 
-            if data.len() >= transport_offset + 4 {
+            // Parse ICMP
+            if protocol == 1 && data.len() >= transport_offset + 2 {
+                info.icmp_type = Some(data[transport_offset]);
+                info.icmp_code = Some(data[transport_offset + 1]);
+            }
+
+            // Parse TCP
+            if protocol == 6 && data.len() >= transport_offset + 20 {
+                info.src_port = Some(u16::from_be_bytes([data[transport_offset], data[transport_offset + 1]]));
+                info.dst_port = Some(u16::from_be_bytes([data[transport_offset + 2], data[transport_offset + 3]]));
+                info.seq_num = Some(u32::from_be_bytes([
+                    data[transport_offset + 4], data[transport_offset + 5],
+                    data[transport_offset + 6], data[transport_offset + 7]
+                ]));
+                info.ack_num = Some(u32::from_be_bytes([
+                    data[transport_offset + 8], data[transport_offset + 9],
+                    data[transport_offset + 10], data[transport_offset + 11]
+                ]));
+                info.window_size = Some(u16::from_be_bytes([data[transport_offset + 14], data[transport_offset + 15]]));
+
+                let flags = data[transport_offset + 13];
+                info.tcp_flags = Some(TcpFlags {
+                    fin: (flags & 0x01) != 0,
+                    syn: (flags & 0x02) != 0,
+                    rst: (flags & 0x04) != 0,
+                    psh: (flags & 0x08) != 0,
+                    ack: (flags & 0x10) != 0,
+                    urg: (flags & 0x20) != 0,
+                    ece: (flags & 0x40) != 0,
+                    cwr: (flags & 0x80) != 0,
+                });
+            }
+
+            // Parse UDP
+            if protocol == 17 && data.len() >= transport_offset + 4 {
                 info.src_port = Some(u16::from_be_bytes([data[transport_offset], data[transport_offset + 1]]));
                 info.dst_port = Some(u16::from_be_bytes([data[transport_offset + 2], data[transport_offset + 3]]));
 
-                // Check for PTP over UDP
-                if protocol == 17 && (info.dst_port == Some(319) || info.dst_port == Some(320)) {
+                if info.dst_port == Some(319) || info.dst_port == Some(320) {
                     info.is_ptp = true;
                 }
             }
         } else if ethertype == 0x86DD && data.len() >= ip_offset + 40 {
             // IPv6
+            info.ttl = Some(data[ip_offset + 7]); // Hop Limit
             let src = &data[ip_offset + 8..ip_offset + 24];
             let dst = &data[ip_offset + 24..ip_offset + 40];
             info.src_ip = Some(format_ipv6(src));
@@ -217,18 +302,58 @@ impl CapturedPacket {
 
             let next_header = data[ip_offset + 6];
             info.protocol = Some(match next_header {
-                0 => "HOPOPT".to_string(),       // Hop-by-Hop Options
+                0 => "HOPOPT".to_string(),
                 6 => "TCP".to_string(),
                 17 => "UDP".to_string(),
-                43 => "IPv6-Route".to_string(),  // Routing Header
-                44 => "IPv6-Frag".to_string(),   // Fragment Header
-                50 => "ESP".to_string(),         // Encapsulating Security Payload
-                51 => "AH".to_string(),          // Authentication Header
+                43 => "IPv6-Route".to_string(),
+                44 => "IPv6-Frag".to_string(),
+                50 => "ESP".to_string(),
+                51 => "AH".to_string(),
                 58 => "ICMPv6".to_string(),
-                59 => "IPv6-NoNxt".to_string(),  // No Next Header
-                60 => "IPv6-Opts".to_string(),   // Destination Options
+                59 => "IPv6-NoNxt".to_string(),
+                60 => "IPv6-Opts".to_string(),
                 _ => format!("Proto({})", next_header),
             });
+
+            // IPv6 transport layer (fixed 40 byte header)
+            let transport_offset = ip_offset + 40;
+
+            // Parse ICMPv6
+            if next_header == 58 && data.len() >= transport_offset + 2 {
+                info.icmp_type = Some(data[transport_offset]);
+                info.icmp_code = Some(data[transport_offset + 1]);
+            }
+
+            // Parse TCP
+            if next_header == 6 && data.len() >= transport_offset + 20 {
+                info.src_port = Some(u16::from_be_bytes([data[transport_offset], data[transport_offset + 1]]));
+                info.dst_port = Some(u16::from_be_bytes([data[transport_offset + 2], data[transport_offset + 3]]));
+                info.seq_num = Some(u32::from_be_bytes([
+                    data[transport_offset + 4], data[transport_offset + 5],
+                    data[transport_offset + 6], data[transport_offset + 7]
+                ]));
+                info.ack_num = Some(u32::from_be_bytes([
+                    data[transport_offset + 8], data[transport_offset + 9],
+                    data[transport_offset + 10], data[transport_offset + 11]
+                ]));
+                let flags = data[transport_offset + 13];
+                info.tcp_flags = Some(TcpFlags {
+                    fin: (flags & 0x01) != 0,
+                    syn: (flags & 0x02) != 0,
+                    rst: (flags & 0x04) != 0,
+                    psh: (flags & 0x08) != 0,
+                    ack: (flags & 0x10) != 0,
+                    urg: (flags & 0x20) != 0,
+                    ece: (flags & 0x40) != 0,
+                    cwr: (flags & 0x80) != 0,
+                });
+            }
+
+            // Parse UDP
+            if next_header == 17 && data.len() >= transport_offset + 4 {
+                info.src_port = Some(u16::from_be_bytes([data[transport_offset], data[transport_offset + 1]]));
+                info.dst_port = Some(u16::from_be_bytes([data[transport_offset + 2], data[transport_offset + 3]]));
+            }
         }
 
         // Check if TSN-related

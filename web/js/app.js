@@ -1398,6 +1398,130 @@ function startPolling() {
     setInterval(updateAllCharts, 3000);
 }
 
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+    // Ignore if typing in input
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') {
+        if (e.key === 'Escape') {
+            e.target.blur();
+        }
+        return;
+    }
+
+    switch (e.key) {
+        case ' ':  // Space - toggle capture
+            e.preventDefault();
+            if (state.isCapturing) {
+                stopCapture();
+            } else {
+                startCapture();
+            }
+            break;
+        case 'c':  // C - clear
+        case 'C':
+            if (!e.ctrlKey && !e.metaKey) {
+                clearAll();
+            }
+            break;
+        case '1':  // Tab shortcuts
+            switchTab('topology');
+            break;
+        case '2':
+            switchTab('stats');
+            break;
+        case '3':
+            switchTab('hosts');
+            break;
+        case '4':
+            switchTab('detail');
+            break;
+        case 'ArrowUp':  // Navigate packets
+            e.preventDefault();
+            navigatePacket(-1);
+            break;
+        case 'ArrowDown':
+            e.preventDefault();
+            navigatePacket(1);
+            break;
+        case 'PageUp':  // Navigate pages
+            e.preventDefault();
+            goToPage(state.currentPage - 1);
+            break;
+        case 'PageDown':
+            e.preventDefault();
+            goToPage(state.currentPage + 1);
+            break;
+        case 'Home':
+            if (e.ctrlKey) {
+                e.preventDefault();
+                goToPage(1);
+            }
+            break;
+        case 'End':
+            if (e.ctrlKey) {
+                e.preventDefault();
+                goToPage(state.totalPages);
+            }
+            break;
+        case 'f':  // Focus filter
+        case 'F':
+            if (!e.ctrlKey && !e.metaKey) {
+                e.preventDefault();
+                document.getElementById('packet-filter').focus();
+            }
+            break;
+        case 'Escape':  // Clear filter
+            document.getElementById('packet-filter').value = '';
+            state.filter = '';
+            renderPacketList();
+            break;
+    }
+});
+
+function switchTab(tabName) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+    document.getElementById(`tab-${tabName}`).classList.add('active');
+
+    if (tabName === 'topology') {
+        setTimeout(renderTopology, 100);
+    } else if (tabName === 'stats') {
+        updateAllCharts();
+    } else if (tabName === 'hosts') {
+        renderHostsList();
+    }
+}
+
+function navigatePacket(direction) {
+    const packets = state.filteredPackets;
+    if (packets.length === 0) return;
+
+    let currentIndex = -1;
+    if (state.selectedPacket) {
+        currentIndex = packets.findIndex(p => p.id === state.selectedPacket.id);
+    }
+
+    let newIndex = currentIndex + direction;
+    if (newIndex < 0) newIndex = 0;
+    if (newIndex >= packets.length) newIndex = packets.length - 1;
+
+    const packet = packets[newIndex];
+    selectPacket(packet);
+
+    // Check if packet is on current page
+    const pageForPacket = Math.floor(newIndex / state.pageSize) + 1;
+    if (pageForPacket !== state.currentPage) {
+        goToPage(pageForPacket);
+    }
+
+    // Scroll selected row into view
+    const row = document.querySelector(`#packet-tbody tr[data-id="${packet.id}"]`);
+    if (row) {
+        row.scrollIntoView({ block: 'nearest' });
+    }
+}
+
 // Global functions for onclick handlers
 window.filterByHost = filterByHost;
 window.selectInterface = selectInterface;
