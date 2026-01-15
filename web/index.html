@@ -114,6 +114,10 @@
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                         Detail
                     </button>
+                    <button class="tab" data-tab="tester">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+                        Tester
+                    </button>
                 </div>
 
                 <!-- Network Topology Tab -->
@@ -206,6 +210,149 @@
                         <div class="detail-section">
                             <h4><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg> Raw Data</h4>
                             <div class="hex-dump" id="hex-dump"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tester Tab -->
+                <div class="tab-content" id="tab-tester">
+                    <div class="tester-grid">
+                        <!-- Ping/Latency Test -->
+                        <div class="tester-card">
+                            <h4><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Latency Test</h4>
+                            <div class="tester-form">
+                                <div class="form-group">
+                                    <label>Target Host</label>
+                                    <input type="text" id="ping-target" placeholder="192.168.1.1 or hostname">
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>Count</label>
+                                        <input type="number" id="ping-count" value="10" min="1" max="100">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Interval (ms)</label>
+                                        <input type="number" id="ping-interval" value="1000" min="100" max="10000">
+                                    </div>
+                                </div>
+                                <button id="btn-ping-start" class="btn btn-primary">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                                    Start Ping
+                                </button>
+                            </div>
+                            <div class="tester-results" id="ping-results">
+                                <div class="result-placeholder">Run test to see results</div>
+                            </div>
+                        </div>
+
+                        <!-- Throughput Test -->
+                        <div class="tester-card">
+                            <h4><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> Throughput Test</h4>
+                            <div class="tester-form">
+                                <div class="form-group">
+                                    <label>Target Host</label>
+                                    <input type="text" id="throughput-target" placeholder="192.168.1.1:5201">
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>Duration (s)</label>
+                                        <input type="number" id="throughput-duration" value="10" min="1" max="60">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Protocol</label>
+                                        <select id="throughput-protocol">
+                                            <option value="tcp">TCP</option>
+                                            <option value="udp">UDP</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>Bandwidth (Mbps)</label>
+                                        <input type="number" id="throughput-bandwidth" value="100" min="1" max="10000">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Mode</label>
+                                        <select id="throughput-mode">
+                                            <option value="client">Client</option>
+                                            <option value="server">Server</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <button id="btn-throughput-start" class="btn btn-primary">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                                    Start Test
+                                </button>
+                            </div>
+                            <div class="tester-results" id="throughput-results">
+                                <div class="result-placeholder">Run test to see results</div>
+                            </div>
+                        </div>
+
+                        <!-- TSN Configuration -->
+                        <div class="tester-card tester-card-wide">
+                            <h4><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> TSN Configuration</h4>
+                            <div class="tsn-config-grid">
+                                <div class="tsn-section">
+                                    <h5>CBS (Credit-Based Shaper)</h5>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>Interface</label>
+                                            <select id="cbs-interface">
+                                                <option value="enp5s0">enp5s0</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Traffic Class</label>
+                                            <select id="cbs-tc">
+                                                <option value="0">TC0</option>
+                                                <option value="1">TC1</option>
+                                                <option value="2">TC2</option>
+                                                <option value="3">TC3</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>idleSlope (kbps)</label>
+                                            <input type="number" id="cbs-idle-slope" value="500000">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>sendSlope (kbps)</label>
+                                            <input type="number" id="cbs-send-slope" value="-500000">
+                                        </div>
+                                    </div>
+                                    <button id="btn-cbs-apply" class="btn btn-secondary">Apply CBS</button>
+                                </div>
+                                <div class="tsn-section">
+                                    <h5>TAS (Time-Aware Shaper)</h5>
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>Cycle Time (ns)</label>
+                                            <input type="number" id="tas-cycle" value="1000000">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Base Time</label>
+                                            <input type="text" id="tas-basetime" value="0" placeholder="ns since epoch">
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Gate Control List</label>
+                                        <textarea id="tas-gcl" rows="3" placeholder="TC:gate_state:interval_ns (one per line)">0:0xFF:500000
+1:0x0F:500000</textarea>
+                                    </div>
+                                    <button id="btn-tas-apply" class="btn btn-secondary">Apply TAS</button>
+                                </div>
+                                <div class="tsn-section">
+                                    <h5>VLAN Priority (PCP)</h5>
+                                    <div class="pcp-mapping">
+                                        <div class="pcp-row"><span>PCP 0-1</span><span>→</span><select><option>BE (Best Effort)</option></select></div>
+                                        <div class="pcp-row"><span>PCP 2-3</span><span>→</span><select><option>EE (Excellent Effort)</option></select></div>
+                                        <div class="pcp-row"><span>PCP 4-5</span><span>→</span><select><option>CA (Critical Apps)</option></select></div>
+                                        <div class="pcp-row"><span>PCP 6-7</span><span>→</span><select><option>NC (Network Control)</option></select></div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

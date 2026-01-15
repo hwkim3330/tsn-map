@@ -194,6 +194,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/pcap/upload", post(api::handlers::upload_pcap))
         .route("/api/interfaces", get(api::handlers::list_interfaces))
         .route("/api/interface/set", post(api::handlers::set_interface))
+        // Test endpoints
+        .route("/api/test/ping", post(api::handlers::ping_test))
+        .route("/api/test/throughput", post(api::handlers::throughput_test))
+        // TSN configuration
+        .route("/api/tsn/cbs", post(api::handlers::configure_cbs))
+        .route("/api/tsn/tas", post(api::handlers::configure_tas))
         // Static files (web frontend)
         .nest_service("/", ServeDir::new("web"))
         // Middleware

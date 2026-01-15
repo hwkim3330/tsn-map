@@ -114,6 +114,12 @@ function setupEventListeners() {
     // Host search and sort
     document.getElementById('host-search').addEventListener('input', renderHostsList);
     document.getElementById('host-sort').addEventListener('change', renderHostsList);
+
+    // Tester controls
+    document.getElementById('btn-ping-start')?.addEventListener('click', startPingTest);
+    document.getElementById('btn-throughput-start')?.addEventListener('click', startThroughputTest);
+    document.getElementById('btn-cbs-apply')?.addEventListener('click', applyCbsConfig);
+    document.getElementById('btn-tas-apply')?.addEventListener('click', applyTasConfig);
 }
 
 // API Functions
@@ -1525,3 +1531,234 @@ function navigatePacket(direction) {
 // Global functions for onclick handlers
 window.filterByHost = filterByHost;
 window.selectInterface = selectInterface;
+
+// ============================================
+// Tester Functions
+// ============================================
+
+// Ping/Latency Test
+async function startPingTest() {
+    const target = document.getElementById('ping-target').value.trim();
+    const count = parseInt(document.getElementById('ping-count').value) || 10;
+    const interval = parseInt(document.getElementById('ping-interval').value) || 1000;
+
+    if (!target) {
+        showNotification('Please enter a target host', 'error');
+        return;
+    }
+
+    const resultsEl = document.getElementById('ping-results');
+    resultsEl.innerHTML = '<div class="result-line">Starting ping test to ' + target + '...</div>';
+
+    const btn = document.getElementById('btn-ping-start');
+    btn.disabled = true;
+    btn.textContent = 'Running...';
+
+    try {
+        const result = await apiCall('/api/test/ping', 'POST', {
+            target,
+            count,
+            interval
+        });
+
+        if (result && result.success) {
+            renderPingResults(result.data);
+        } else {
+            resultsEl.innerHTML = `<div class="result-line result-error">Error: ${result?.error || 'Unknown error'}</div>`;
+        }
+    } catch (e) {
+        resultsEl.innerHTML = `<div class="result-line result-error">Error: ${e.message}</div>`;
+    }
+
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Start Ping';
+}
+
+function renderPingResults(data) {
+    const resultsEl = document.getElementById('ping-results');
+
+    if (!data || !data.results) {
+        resultsEl.innerHTML = '<div class="result-line result-error">No results</div>';
+        return;
+    }
+
+    let html = '';
+
+    // Individual results
+    data.results.forEach((r, i) => {
+        if (r.success) {
+            html += `<div class="result-line result-success">seq=${i+1} time=${r.rtt_ms.toFixed(2)}ms ttl=${r.ttl || '-'}</div>`;
+        } else {
+            html += `<div class="result-line result-error">seq=${i+1} timeout</div>`;
+        }
+    });
+
+    // Statistics
+    if (data.stats) {
+        html += `
+            <div class="result-stats">
+                <div class="result-stat">
+                    <div class="result-stat-value">${data.stats.min_ms?.toFixed(2) || '-'}</div>
+                    <div class="result-stat-label">Min (ms)</div>
+                </div>
+                <div class="result-stat">
+                    <div class="result-stat-value">${data.stats.avg_ms?.toFixed(2) || '-'}</div>
+                    <div class="result-stat-label">Avg (ms)</div>
+                </div>
+                <div class="result-stat">
+                    <div class="result-stat-value">${data.stats.max_ms?.toFixed(2) || '-'}</div>
+                    <div class="result-stat-label">Max (ms)</div>
+                </div>
+                <div class="result-stat">
+                    <div class="result-stat-value">${data.stats.loss_percent?.toFixed(1) || '0'}%</div>
+                    <div class="result-stat-label">Loss</div>
+                </div>
+            </div>
+        `;
+    }
+
+    resultsEl.innerHTML = html;
+}
+
+// Throughput Test
+async function startThroughputTest() {
+    const target = document.getElementById('throughput-target').value.trim();
+    const duration = parseInt(document.getElementById('throughput-duration').value) || 10;
+    const protocol = document.getElementById('throughput-protocol').value;
+    const bandwidth = parseInt(document.getElementById('throughput-bandwidth').value) || 100;
+    const mode = document.getElementById('throughput-mode').value;
+
+    if (!target && mode === 'client') {
+        showNotification('Please enter a target host', 'error');
+        return;
+    }
+
+    const resultsEl = document.getElementById('throughput-results');
+    resultsEl.innerHTML = `<div class="result-line">Starting ${mode} mode (${protocol.toUpperCase()})...</div>`;
+
+    const btn = document.getElementById('btn-throughput-start');
+    btn.disabled = true;
+    btn.textContent = 'Running...';
+
+    try {
+        const result = await apiCall('/api/test/throughput', 'POST', {
+            target,
+            duration,
+            protocol,
+            bandwidth,
+            mode
+        });
+
+        if (result && result.success) {
+            renderThroughputResults(result.data);
+        } else {
+            resultsEl.innerHTML = `<div class="result-line result-error">Error: ${result?.error || 'Unknown error'}</div>`;
+        }
+    } catch (e) {
+        resultsEl.innerHTML = `<div class="result-line result-error">Error: ${e.message}</div>`;
+    }
+
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Start Test';
+}
+
+function renderThroughputResults(data) {
+    const resultsEl = document.getElementById('throughput-results');
+
+    if (!data) {
+        resultsEl.innerHTML = '<div class="result-line result-error">No results</div>';
+        return;
+    }
+
+    let html = `
+        <div class="result-stats">
+            <div class="result-stat">
+                <div class="result-stat-value">${formatBandwidth(data.bandwidth_bps)}</div>
+                <div class="result-stat-label">Throughput</div>
+            </div>
+            <div class="result-stat">
+                <div class="result-stat-value">${data.packets_sent || 0}</div>
+                <div class="result-stat-label">Packets TX</div>
+            </div>
+            <div class="result-stat">
+                <div class="result-stat-value">${data.packets_received || 0}</div>
+                <div class="result-stat-label">Packets RX</div>
+            </div>
+            <div class="result-stat">
+                <div class="result-stat-value">${data.loss_percent?.toFixed(2) || '0'}%</div>
+                <div class="result-stat-label">Loss</div>
+            </div>
+        </div>
+    `;
+
+    if (data.jitter_ms) {
+        html += `<div class="result-line">Jitter: ${data.jitter_ms.toFixed(3)} ms</div>`;
+    }
+
+    resultsEl.innerHTML = html;
+}
+
+function formatBandwidth(bps) {
+    if (!bps) return '-';
+    if (bps >= 1e9) return (bps / 1e9).toFixed(2) + ' Gbps';
+    if (bps >= 1e6) return (bps / 1e6).toFixed(2) + ' Mbps';
+    if (bps >= 1e3) return (bps / 1e3).toFixed(2) + ' Kbps';
+    return bps + ' bps';
+}
+
+// TSN Configuration
+async function applyCbsConfig() {
+    const iface = document.getElementById('cbs-interface').value;
+    const tc = parseInt(document.getElementById('cbs-tc').value);
+    const idleSlope = parseInt(document.getElementById('cbs-idle-slope').value);
+    const sendSlope = parseInt(document.getElementById('cbs-send-slope').value);
+
+    try {
+        const result = await apiCall('/api/tsn/cbs', 'POST', {
+            interface: iface,
+            traffic_class: tc,
+            idle_slope: idleSlope,
+            send_slope: sendSlope
+        });
+
+        if (result && result.success) {
+            showNotification('CBS configuration applied', 'success');
+        } else {
+            showNotification('Failed to apply CBS: ' + (result?.error || 'Unknown error'), 'error');
+        }
+    } catch (e) {
+        showNotification('Failed to apply CBS: ' + e.message, 'error');
+    }
+}
+
+async function applyTasConfig() {
+    const cycleTime = parseInt(document.getElementById('tas-cycle').value);
+    const baseTime = document.getElementById('tas-basetime').value;
+    const gclText = document.getElementById('tas-gcl').value;
+
+    // Parse GCL
+    const gcl = gclText.split('\n').filter(l => l.trim()).map(line => {
+        const parts = line.split(':');
+        return {
+            tc: parseInt(parts[0]),
+            gate_state: parseInt(parts[1]),
+            interval: parseInt(parts[2])
+        };
+    });
+
+    try {
+        const result = await apiCall('/api/tsn/tas', 'POST', {
+            cycle_time: cycleTime,
+            base_time: baseTime,
+            gate_control_list: gcl
+        });
+
+        if (result && result.success) {
+            showNotification('TAS configuration applied', 'success');
+        } else {
+            showNotification('Failed to apply TAS: ' + (result?.error || 'Unknown error'), 'error');
+        }
+    } catch (e) {
+        showNotification('Failed to apply TAS: ' + e.message, 'error');
+    }
+}
