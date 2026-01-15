@@ -1080,7 +1080,7 @@ function renderTopology() {
             .attr('y', height / 2)
             .attr('text-anchor', 'middle')
             .attr('fill', '#8b949e')
-            .text('캡처를 시작하면 네트워크 노드가 표시됩니다');
+            .text('Start capture to see network nodes');
         return;
     }
 
