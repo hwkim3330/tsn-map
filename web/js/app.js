@@ -181,12 +181,12 @@ function updateCaptureStatus(capturing) {
     const stopBtn = document.getElementById('btn-stop');
 
     if (capturing) {
-        statusEl.textContent = '캡처 중';
+        statusEl.textContent = 'Capturing';
         statusEl.className = 'status status-capturing';
         startBtn.disabled = true;
         stopBtn.disabled = false;
     } else {
-        statusEl.textContent = '정지';
+        statusEl.textContent = 'Stopped';
         statusEl.className = 'status status-stopped';
         startBtn.disabled = false;
         stopBtn.disabled = true;
@@ -198,10 +198,10 @@ function updateConnectionStatus(connected) {
     const text = document.getElementById('connection-text');
     if (connected) {
         dot.className = 'status-dot connected';
-        text.textContent = '연결됨';
+        text.textContent = 'Connected';
     } else {
         dot.className = 'status-dot';
-        text.textContent = '연결 끊김';
+        text.textContent = 'Disconnected';
     }
 }
 
@@ -362,7 +362,7 @@ function updateConversation(packet) {
 }
 
 function updateCounters() {
-    document.getElementById('packet-count').textContent = `${state.stats.packets_captured.toLocaleString()} 패킷`;
+    document.getElementById('packet-count').textContent = `${state.stats.packets_captured.toLocaleString()} packets`;
     document.getElementById('byte-count').textContent = formatBytes(state.stats.bytes_captured);
 }
 
@@ -637,7 +637,7 @@ function selectPacket(packet) {
 
     // Update footer info immediately
     document.getElementById('selected-packet-info').textContent =
-        `패킷 #${packet.id} | ${packet.info.protocol || packet.info.ethertype_name} | ${packet.length} bytes`;
+        `packets #${packet.id} | ${packet.info.protocol || packet.info.ethertype_name} | ${packet.length} bytes`;
 
     // Prepare detail content (will show when detail tab is clicked)
     document.getElementById('detail-placeholder').style.display = 'none';
@@ -646,16 +646,16 @@ function selectPacket(packet) {
     // Fill frame info
     const frameInfo = document.getElementById('frame-info');
     frameInfo.innerHTML = `
-        <div class="detail-row"><span>패킷 번호:</span><span>${packet.id}</span></div>
-        <div class="detail-row"><span>캡처 시간:</span><span>${new Date(packet.timestamp).toISOString()}</span></div>
-        <div class="detail-row"><span>패킷 길이:</span><span>${packet.length} bytes</span></div>
+        <div class="detail-row"><span>Packet #:</span><span>${packet.id}</span></div>
+        <div class="detail-row"><span>Capture Time:</span><span>${new Date(packet.timestamp).toISOString()}</span></div>
+        <div class="detail-row"><span>Length:</span><span>${packet.length} bytes</span></div>
     `;
 
     // Fill ethernet info
     const ethInfo = document.getElementById('eth-info');
     ethInfo.innerHTML = `
-        <div class="detail-row"><span>출발지 MAC:</span><span>${packet.info.src_mac}</span></div>
-        <div class="detail-row"><span>목적지 MAC:</span><span>${packet.info.dst_mac}</span></div>
+        <div class="detail-row"><span>Source MAC:</span><span>${packet.info.src_mac}</span></div>
+        <div class="detail-row"><span>Destination MAC:</span><span>${packet.info.dst_mac}</span></div>
         <div class="detail-row"><span>EtherType:</span><span>${packet.info.ethertype_name} (0x${packet.info.ethertype?.toString(16).padStart(4, '0') || '0000'})</span></div>
         ${packet.info.vlan_id ? `<div class="detail-row"><span>VLAN ID:</span><span>${packet.info.vlan_id}</span></div>` : ''}
         ${packet.info.vlan_pcp !== undefined ? `<div class="detail-row"><span>VLAN PCP:</span><span>${packet.info.vlan_pcp}</span></div>` : ''}
@@ -667,10 +667,10 @@ function selectPacket(packet) {
     if (packet.info.src_ip) {
         ipSection.style.display = 'block';
         ipInfo.innerHTML = `
-            <div class="detail-row"><span>출발지 IP:</span><span>${packet.info.src_ip}</span></div>
-            <div class="detail-row"><span>목적지 IP:</span><span>${packet.info.dst_ip}</span></div>
+            <div class="detail-row"><span>Source IP:</span><span>${packet.info.src_ip}</span></div>
+            <div class="detail-row"><span>Destination IP:</span><span>${packet.info.dst_ip}</span></div>
             ${packet.info.ttl ? `<div class="detail-row"><span>TTL:</span><span>${packet.info.ttl}</span></div>` : ''}
-            ${packet.info.ip_protocol ? `<div class="detail-row"><span>프로토콜:</span><span>${packet.info.ip_protocol}</span></div>` : ''}
+            ${packet.info.ip_protocol ? `<div class="detail-row"><span>Protocol:</span><span>${packet.info.ip_protocol}</span></div>` : ''}
         `;
     } else {
         ipSection.style.display = 'none';
@@ -682,9 +682,9 @@ function selectPacket(packet) {
     if (packet.info.src_port) {
         transportSection.style.display = 'block';
         let html = `
-            <div class="detail-row"><span>프로토콜:</span><span>${packet.info.protocol}</span></div>
-            <div class="detail-row"><span>출발지 포트:</span><span>${packet.info.src_port}</span></div>
-            <div class="detail-row"><span>목적지 포트:</span><span>${packet.info.dst_port}</span></div>
+            <div class="detail-row"><span>Protocol:</span><span>${packet.info.protocol}</span></div>
+            <div class="detail-row"><span>Source Port:</span><span>${packet.info.src_port}</span></div>
+            <div class="detail-row"><span>Destination Port:</span><span>${packet.info.dst_port}</span></div>
         `;
         if (packet.info.protocol === 'TCP') {
             if (packet.info.seq_num !== undefined) {
@@ -713,7 +713,7 @@ function selectPacket(packet) {
 function renderHexDump(data) {
     const hexDump = document.getElementById('hex-dump');
     if (!data || data.length === 0) {
-        hexDump.textContent = '데이터 없음';
+        hexDump.textContent = 'No data';
         return;
     }
 
@@ -779,7 +779,7 @@ function initializeCharts() {
             labels: [],
             datasets: [
                 {
-                    label: '패킷/초',
+                    label: 'pps',
                     data: [],
                     borderColor: '#2f81f7',
                     backgroundColor: 'rgba(47, 129, 247, 0.1)',
@@ -788,7 +788,7 @@ function initializeCharts() {
                     yAxisID: 'y'
                 },
                 {
-                    label: 'KB/초',
+                    label: 'KB/s',
                     data: [],
                     borderColor: '#3fb950',
                     backgroundColor: 'rgba(63, 185, 80, 0.1)',
@@ -827,7 +827,7 @@ function initializeCharts() {
         data: {
             labels: [],
             datasets: [{
-                label: '패킷 수',
+                label: 'Packets',
                 data: [],
                 backgroundColor: '#2f81f7'
             }]
@@ -849,7 +849,7 @@ function initializeCharts() {
         data: {
             labels: ['0-64', '65-128', '129-256', '257-512', '513-1024', '1025-1518', '>1518'],
             datasets: [{
-                label: '패킷 수',
+                label: 'Packets',
                 data: [0, 0, 0, 0, 0, 0, 0],
                 backgroundColor: '#58a6ff'
             }]
@@ -927,7 +927,7 @@ setInterval(() => {
     // Update chart
     if (state.charts.traffic) {
         state.charts.traffic.data.labels = trafficHistory.map((_, i) =>
-            i === trafficHistory.length - 1 ? '현재' : `-${trafficHistory.length - 1 - i}초`
+            i === trafficHistory.length - 1 ? 'now' : `-${trafficHistory.length - 1 - i}s`
         );
         state.charts.traffic.data.datasets[0].data = trafficHistory.map(h => h.pps);
         state.charts.traffic.data.datasets[1].data = trafficHistory.map(h => h.bps.toFixed(1));
@@ -965,27 +965,27 @@ function renderHostsList() {
                 <span class="host-ip">${host.ip}</span>
                 <span class="host-type">${getHostType(host)}</span>
             </div>
-            <div class="host-mac">${host.mac || '알 수 없음'}</div>
+            <div class="host-mac">${host.mac || 'Unknown'}</div>
             <div class="host-stats">
                 <div class="stat-item">
-                    <span class="stat-label">송신</span>
+                    <span class="stat-label">TX</span>
                     <span class="stat-value">${host.packets_sent.toLocaleString()} pkts / ${formatBytes(host.bytes_sent)}</span>
                 </div>
                 <div class="stat-item">
-                    <span class="stat-label">수신</span>
+                    <span class="stat-label">RX</span>
                     <span class="stat-value">${host.packets_recv.toLocaleString()} pkts / ${formatBytes(host.bytes_recv)}</span>
                 </div>
                 <div class="stat-item">
-                    <span class="stat-label">프로토콜</span>
+                    <span class="stat-label">Protocols</span>
                     <span class="stat-value">${[...host.protocols].slice(0, 5).join(', ') || '-'}</span>
                 </div>
                 <div class="stat-item">
-                    <span class="stat-label">포트</span>
+                    <span class="stat-label">Ports</span>
                     <span class="stat-value">${[...host.ports].slice(0, 8).join(', ') || '-'}</span>
                 </div>
             </div>
             <div class="host-time">
-                마지막 활동: ${formatTimeAgo(host.last_seen)}
+                Last seen: ${formatTimeAgo(host.last_seen)}
             </div>
         </div>
     `).join('');
@@ -994,12 +994,12 @@ function renderHostsList() {
 function getHostType(host) {
     const ip = host.ip;
     if (ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('172.16.')) {
-        if (ip.endsWith('.1') || ip.endsWith('.254')) return '게이트웨이';
-        return '로컬';
+        if (ip.endsWith('.1') || ip.endsWith('.254')) return 'Gateway';
+        return 'Local';
     }
-    if (ip === '255.255.255.255' || ip.endsWith('.255')) return '브로드캐스트';
-    if (ip.startsWith('224.') || ip.startsWith('239.')) return '멀티캐스트';
-    return '원격';
+    if (ip === '255.255.255.255' || ip.endsWith('.255')) return 'Broadcast';
+    if (ip.startsWith('224.') || ip.startsWith('239.')) return 'Multicast';
+    return 'Remote';
 }
 
 function filterByHost(ip) {
@@ -1010,10 +1010,10 @@ function filterByHost(ip) {
 
 function formatTimeAgo(timestamp) {
     const diff = Date.now() - timestamp;
-    if (diff < 1000) return '방금 전';
-    if (diff < 60000) return `${Math.floor(diff / 1000)}초 전`;
-    if (diff < 3600000) return `${Math.floor(diff / 60000)}분 전`;
-    return `${Math.floor(diff / 3600000)}시간 전`;
+    if (diff < 1000) return 'just now';
+    if (diff < 60000) return `${Math.floor(diff / 1000)}s ago`;
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
+    return `${Math.floor(diff / 3600000)}h ago`;
 }
 
 // Topology
@@ -1241,7 +1241,7 @@ async function selectInterface(name) {
 // File Operations
 async function savePcap() {
     if (state.packets.length === 0) {
-        showNotification('저장할 패킷이 없습니다', 'error');
+        showNotification('No packets to save', 'error');
         return;
     }
 
@@ -1262,13 +1262,13 @@ async function savePcap() {
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            showNotification(`${state.packets.length}개 패킷 저장됨`, 'success');
+            showNotification(`${state.packets.length}packets saved`, 'success');
         } else {
-            showNotification('PCAP 저장 실패', 'error');
+            showNotification('PCAP save failed', 'error');
         }
     } catch (error) {
         console.error('Save error:', error);
-        showNotification('PCAP 저장 실패', 'error');
+        showNotification('PCAP save failed', 'error');
     }
 }
 
@@ -1284,7 +1284,7 @@ async function handlePcapFileSelect(event) {
     formData.append('file', file);
 
     try {
-        showNotification('파일 로딩 중...', 'info');
+        showNotification('Loading file...', 'info');
         const response = await fetch('/api/pcap/upload', {
             method: 'POST',
             body: formData
@@ -1296,14 +1296,14 @@ async function handlePcapFileSelect(event) {
                 clearAll();
                 document.getElementById('capture-file').textContent = file.name;
                 await loadPackets();
-                showNotification(`${result.data.packets_loaded}개 패킷 로드됨`, 'success');
+                showNotification(`${result.data.packets_loaded}packets loaded`, 'success');
             }
         } else {
-            showNotification('PCAP 로드 실패', 'error');
+            showNotification('PCAP load failed', 'error');
         }
     } catch (error) {
         console.error('Load error:', error);
-        showNotification('PCAP 로드 실패', 'error');
+        showNotification('PCAP load failed', 'error');
     }
 
     // Reset file input
@@ -1326,7 +1326,7 @@ function showNotification(message, type = 'info') {
 
 function exportCSV() {
     if (state.packets.length === 0) {
-        alert('내보낼 패킷이 없습니다');
+        alert('No packets to export');
         return;
     }
 
@@ -1369,7 +1369,7 @@ function clearAll() {
     updateAllCharts();
     renderHostsList();
 
-    document.getElementById('capture-file').textContent = '캡처 파일 없음';
+    document.getElementById('capture-file').textContent = 'No capture file';
     document.getElementById('selected-packet-info').textContent = '-';
 
     // Reset detail panel

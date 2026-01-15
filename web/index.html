@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -17,33 +17,33 @@
                 <span>NetMap</span>
             </div>
             <div class="status-bar">
-                <span id="interface-name" class="interface" title="클릭하여 인터페이스 변경">enp5s0</span>
-                <span id="capture-status" class="status status-stopped">정지</span>
-                <span id="packet-count" class="counter">0 패킷</span>
+                <span id="interface-name" class="interface" title="Click to change interface">enp5s0</span>
+                <span id="capture-status" class="status status-stopped">Stopped</span>
+                <span id="packet-count" class="counter">0 packets</span>
                 <span id="byte-count" class="counter">0 B</span>
             </div>
             <div class="controls">
                 <button id="btn-start" class="btn btn-primary">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-                    캡처 시작
+                    Start
                 </button>
                 <button id="btn-stop" class="btn btn-danger" disabled>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg>
-                    정지
+                    Stop
                 </button>
                 <button id="btn-clear" class="btn btn-secondary">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-                    초기화
+                    Clear
                 </button>
                 <div class="dropdown">
                     <button class="btn btn-secondary">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-                        파일
+                        File
                     </button>
                     <div class="dropdown-content">
-                        <a href="#" id="btn-save">PCAP 저장</a>
-                        <a href="#" id="btn-load">PCAP 열기</a>
-                        <a href="#" id="btn-export-csv">CSV 내보내기</a>
+                        <a href="#" id="btn-save">Save PCAP</a>
+                        <a href="#" id="btn-load">Open PCAP</a>
+                        <a href="#" id="btn-export-csv">Export CSV</a>
                     </div>
                 </div>
             </div>
@@ -54,10 +54,10 @@
             <!-- Left Panel - Packet List (Wireshark style) -->
             <div class="panel panel-packets">
                 <div class="panel-header">
-                    <h3><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg> 패킷 목록</h3>
+                    <h3><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg> Packets</h3>
                     <div class="filter-bar">
-                        <input type="text" id="packet-filter" placeholder="필터: ip.addr==192.168.1.1, tcp, udp, http...">
-                        <button id="btn-apply-filter" class="btn btn-small">적용</button>
+                        <input type="text" id="packet-filter" placeholder="Filter: ip.addr==192.168.1.1, tcp, udp, http...">
+                        <button id="btn-apply-filter" class="btn btn-small">Apply</button>
                     </div>
                 </div>
                 <div class="packet-list" id="packet-list">
@@ -65,12 +65,12 @@
                         <thead>
                             <tr>
                                 <th>No.</th>
-                                <th>시간</th>
-                                <th>출발지</th>
-                                <th>목적지</th>
-                                <th>프로토콜</th>
-                                <th>길이</th>
-                                <th>정보</th>
+                                <th>Time</th>
+                                <th>Source</th>
+                                <th>Destination</th>
+                                <th>Protocol</th>
+                                <th>Length</th>
+                                <th>Info</th>
                             </tr>
                         </thead>
                         <tbody id="packet-tbody">
@@ -78,19 +78,19 @@
                     </table>
                 </div>
                 <div class="pagination" id="pagination">
-                    <button class="btn btn-small" id="btn-first-page" title="처음">«</button>
-                    <button class="btn btn-small" id="btn-prev-page" title="이전">‹</button>
+                    <button class="btn btn-small" id="btn-first-page" title="First">«</button>
+                    <button class="btn btn-small" id="btn-prev-page" title="Previous">‹</button>
                     <span class="page-info">
                         <span id="current-page">1</span> / <span id="total-pages">1</span>
-                        <span class="page-total">(<span id="filtered-count">0</span>개)</span>
+                        <span class="page-total">(<span id="filtered-count">0</span>)</span>
                     </span>
-                    <button class="btn btn-small" id="btn-next-page" title="다음">›</button>
-                    <button class="btn btn-small" id="btn-last-page" title="마지막">»</button>
+                    <button class="btn btn-small" id="btn-next-page" title="Next">›</button>
+                    <button class="btn btn-small" id="btn-last-page" title="Last">»</button>
                     <select id="page-size" class="page-size-select">
-                        <option value="100">100개</option>
-                        <option value="200">200개</option>
-                        <option value="500">500개</option>
-                        <option value="1000">1000개</option>
+                        <option value="100">100</option>
+                        <option value="200">200</option>
+                        <option value="500">500</option>
+                        <option value="1000">1000</option>
                     </select>
                 </div>
             </div>
@@ -100,19 +100,19 @@
                 <div class="tabs">
                     <button class="tab active" data-tab="topology">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/><line x1="12" y1="8" x2="5" y2="16"/><line x1="12" y1="8" x2="19" y2="16"/></svg>
-                        네트워크 맵
+                        Topology
                     </button>
                     <button class="tab" data-tab="stats">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-                        통계
+                        Statistics
                     </button>
                     <button class="tab" data-tab="hosts">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-                        호스트
+                        Hosts
                     </button>
                     <button class="tab" data-tab="detail">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                        상세
+                        Detail
                     </button>
                 </div>
 
@@ -124,15 +124,15 @@
                         <button id="btn-zoom-in" class="btn btn-small">+</button>
                         <button id="btn-zoom-out" class="btn btn-small">-</button>
                         <button id="btn-zoom-fit" class="btn btn-small">Fit</button>
-                        <label class="toggle"><input type="checkbox" id="show-labels" checked> 라벨</label>
-                        <label class="toggle"><input type="checkbox" id="auto-refresh" checked> 자동 갱신</label>
+                        <label class="toggle"><input type="checkbox" id="show-labels" checked> Labels</label>
+                        <label class="toggle"><input type="checkbox" id="auto-refresh" checked> Auto</label>
                     </div>
                     <div id="topology-graph"></div>
                     <div class="topology-legend">
-                        <span class="legend-item"><span class="dot dot-local"></span> 로컬</span>
-                        <span class="legend-item"><span class="dot dot-gateway"></span> 게이트웨이</span>
-                        <span class="legend-item"><span class="dot dot-remote"></span> 원격</span>
-                        <span class="legend-item"><span class="dot dot-broadcast"></span> 브로드캐스트</span>
+                        <span class="legend-item"><span class="dot dot-local"></span> Local</span>
+                        <span class="legend-item"><span class="dot dot-gateway"></span> Gateway</span>
+                        <span class="legend-item"><span class="dot dot-remote"></span> Remote</span>
+                        <span class="legend-item"><span class="dot dot-broadcast"></span> Broadcast</span>
                     </div>
                 </div>
 
@@ -140,25 +140,25 @@
                 <div class="tab-content" id="tab-stats">
                     <div class="stats-grid-2x2">
                         <div class="chart-card">
-                            <h4>프로토콜 분포</h4>
+                            <h4>Protocol Distribution</h4>
                             <div class="chart-wrapper">
                                 <canvas id="protocol-pie-chart"></canvas>
                             </div>
                         </div>
                         <div class="chart-card">
-                            <h4>트래픽 추이</h4>
+                            <h4>Traffic Rate</h4>
                             <div class="chart-wrapper">
                                 <canvas id="traffic-line-chart"></canvas>
                             </div>
                         </div>
                         <div class="chart-card">
-                            <h4>Top 10 대화</h4>
+                            <h4>Top 10 Conversations</h4>
                             <div class="chart-wrapper">
                                 <canvas id="conversations-bar-chart"></canvas>
                             </div>
                         </div>
                         <div class="chart-card">
-                            <h4>패킷 크기 분포</h4>
+                            <h4>Packet Size Distribution</h4>
                             <div class="chart-wrapper">
                                 <canvas id="packet-size-chart"></canvas>
                             </div>
@@ -169,11 +169,11 @@
                 <!-- Hosts Tab -->
                 <div class="tab-content" id="tab-hosts">
                     <div class="hosts-toolbar">
-                        <input type="text" id="host-search" placeholder="호스트 검색...">
+                        <input type="text" id="host-search" placeholder="Search hosts...">
                         <select id="host-sort">
-                            <option value="packets">패킷 수</option>
-                            <option value="bytes">바이트</option>
-                            <option value="last_seen">최근 활동</option>
+                            <option value="packets">Packets</option>
+                            <option value="bytes">Bytes</option>
+                            <option value="last_seen">Last Seen</option>
                         </select>
                     </div>
                     <div class="hosts-list" id="hosts-list">
@@ -184,15 +184,15 @@
                 <!-- Packet Detail Tab -->
                 <div class="tab-content" id="tab-detail">
                     <div class="detail-placeholder" id="detail-placeholder">
-                        패킷을 선택하면 상세 정보가 표시됩니다
+                        Select a packet to view details
                     </div>
                     <div class="detail-content" id="detail-content" style="display:none;">
                         <div class="detail-section">
-                            <h4><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> 프레임 정보</h4>
+                            <h4><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg> Frame</h4>
                             <div class="detail-tree" id="frame-info"></div>
                         </div>
                         <div class="detail-section">
-                            <h4><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg> 이더넷</h4>
+                            <h4><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg> Ethernet</h4>
                             <div class="detail-tree" id="eth-info"></div>
                         </div>
                         <div class="detail-section" id="ip-section">
@@ -200,11 +200,11 @@
                             <div class="detail-tree" id="ip-info"></div>
                         </div>
                         <div class="detail-section" id="transport-section">
-                            <h4><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> 전송 계층</h4>
+                            <h4><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> Transport</h4>
                             <div class="detail-tree" id="transport-info"></div>
                         </div>
                         <div class="detail-section">
-                            <h4><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg> Raw 데이터</h4>
+                            <h4><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg> Raw Data</h4>
                             <div class="hex-dump" id="hex-dump"></div>
                         </div>
                     </div>
@@ -215,14 +215,14 @@
         <!-- Footer -->
         <footer class="footer">
             <div class="footer-left">
-                <span id="capture-file">캡처 파일 없음</span>
+                <span id="capture-file">No capture file</span>
             </div>
             <div class="footer-center">
                 <span id="selected-packet-info">-</span>
             </div>
             <div class="footer-right">
                 <span id="connection-status" class="status-dot"></span>
-                <span id="connection-text">연결됨</span>
+                <span id="connection-text">Connected</span>
             </div>
         </footer>
     </div>
@@ -230,10 +230,10 @@
     <!-- Interface Selection Modal -->
     <div id="interface-modal" class="modal" style="display:none;">
         <div class="modal-content">
-            <h3>네트워크 인터페이스 선택</h3>
+            <h3>Select Network Interface</h3>
             <div id="interface-list" class="interface-list"></div>
             <div class="modal-buttons">
-                <button id="btn-interface-cancel" class="btn btn-secondary">취소</button>
+                <button id="btn-interface-cancel" class="btn btn-secondary">Cancel</button>
             </div>
         </div>
     </div>
