@@ -1,24 +1,24 @@
 :root {
-    --bg-primary: #ffffff;
-    --bg-secondary: #f5f5f7;
-    --bg-tertiary: #e8e8ed;
-    --bg-card: #ffffff;
-    --border-color: #d2d2d7;
-    --border-light: #e5e5ea;
-    --text-primary: #1d1d1f;
-    --text-secondary: #86868b;
-    --text-tertiary: #aeaeb2;
-    --accent-primary: #007aff;
-    --accent-secondary: #5ac8fa;
-    --accent-green: #34c759;
-    --accent-orange: #ff9500;
-    --accent-red: #ff3b30;
-    --accent-purple: #af52de;
-    --accent-yellow: #ffcc00;
-    --accent-cyan: #32ade6;
-    --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
-    --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
-    --shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
+    --bg-primary: #1c1c1e;
+    --bg-secondary: #2c2c2e;
+    --bg-tertiary: #3a3a3c;
+    --bg-card: #252528;
+    --border-color: #48484a;
+    --border-light: #3a3a3c;
+    --text-primary: #f5f5f7;
+    --text-secondary: #98989d;
+    --text-tertiary: #6e6e73;
+    --accent-primary: #0a84ff;
+    --accent-secondary: #64d2ff;
+    --accent-green: #30d158;
+    --accent-orange: #ff9f0a;
+    --accent-red: #ff453a;
+    --accent-purple: #bf5af2;
+    --accent-yellow: #ffd60a;
+    --accent-cyan: #40c8e0;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+    --shadow-lg: 0 8px 24px rgba(0,0,0,0.5);
 }
 
 * {
@@ -48,10 +48,8 @@ body {
     align-items: center;
     justify-content: space-between;
     padding: 12px 24px;
-    background: rgba(255, 255, 255, 0.8);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border-bottom: 1px solid var(--border-light);
+    background: #ffffff;
+    border-bottom: 1px solid #e5e5ea;
 }
 
 .logo {
@@ -60,7 +58,7 @@ body {
     gap: 12px;
     font-size: 1.3em;
     font-weight: 600;
-    color: var(--text-primary);
+    color: #1d1d1f;
     letter-spacing: -0.02em;
 }
 
@@ -77,17 +75,18 @@ body {
 
 .interface {
     padding: 6px 14px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
+    background: #f5f5f7;
+    border: 1px solid #d2d2d7;
     border-radius: 8px;
     font-family: 'SF Mono', Menlo, monospace;
     font-size: 0.9em;
+    color: #1d1d1f;
     cursor: pointer;
     transition: all 0.2s ease;
 }
 
 .interface:hover {
-    background: var(--bg-tertiary);
+    background: #e8e8ed;
     border-color: var(--accent-primary);
 }
 
@@ -117,7 +116,7 @@ body {
 .counter {
     font-family: 'SF Mono', Menlo, monospace;
     font-size: 0.9em;
-    color: var(--text-secondary);
+    color: #86868b;
     font-weight: 500;
 }
 
@@ -164,13 +163,13 @@ body {
 }
 
 .btn-secondary {
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-    border: 1px solid var(--border-color);
+    background: #f5f5f7;
+    color: #1d1d1f;
+    border: 1px solid #d2d2d7;
 }
 
 .btn-secondary:hover:not(:disabled) {
-    background: var(--bg-tertiary);
+    background: #e8e8ed;
 }
 
 .btn-small {
@@ -195,12 +194,12 @@ body {
     position: absolute;
     right: 0;
     top: calc(100% + 4px);
-    background: var(--bg-card);
-    border: 1px solid var(--border-light);
+    background: #ffffff;
+    border: 1px solid #e5e5ea;
     border-radius: 12px;
     min-width: 160px;
     z-index: 1000;
-    box-shadow: var(--shadow-lg);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
     overflow: hidden;
 }
 
@@ -211,14 +210,14 @@ body {
 .dropdown-content a {
     display: block;
     padding: 12px 16px;
-    color: var(--text-primary);
+    color: #1d1d1f;
     text-decoration: none;
     font-size: 0.9em;
     transition: background 0.15s;
 }
 
 .dropdown-content a:hover {
-    background: var(--bg-secondary);
+    background: #f5f5f7;
 }
 
 /* Main Content */
@@ -308,6 +307,7 @@ body {
     border-collapse: collapse;
     font-size: 0.82em;
     font-family: 'SF Mono', Menlo, monospace;
+    table-layout: fixed;
 }
 
 .packet-list th {
@@ -331,8 +331,23 @@ body {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 200px;
 }
+
+/* Column widths */
+.packet-list th:nth-child(1),
+.packet-list td:nth-child(1) { width: 60px; max-width: 60px; }  /* No. */
+.packet-list th:nth-child(2),
+.packet-list td:nth-child(2) { width: 90px; max-width: 90px; }  /* Time */
+.packet-list th:nth-child(3),
+.packet-list td:nth-child(3) { width: 160px; max-width: 160px; } /* Source */
+.packet-list th:nth-child(4),
+.packet-list td:nth-child(4) { width: 160px; max-width: 160px; } /* Destination */
+.packet-list th:nth-child(5),
+.packet-list td:nth-child(5) { width: 80px; max-width: 80px; }  /* Protocol */
+.packet-list th:nth-child(6),
+.packet-list td:nth-child(6) { width: 60px; max-width: 60px; }  /* Length */
+.packet-list th:nth-child(7),
+.packet-list td:nth-child(7) { min-width: 200px; }              /* Info */
 
 .packet-list tr {
     cursor: pointer;
@@ -403,31 +418,31 @@ body {
     opacity: 0.3;
 }
 
-/* Protocol Colors - Softer for light theme */
-.packet-list tr.proto-tcp { background: rgba(175, 82, 222, 0.08); }
-.packet-list tr.proto-udp { background: rgba(0, 122, 255, 0.06); }
-.packet-list tr.proto-http { background: rgba(52, 199, 89, 0.08); }
-.packet-list tr.proto-https { background: rgba(90, 200, 250, 0.1); }
-.packet-list tr.proto-dns { background: rgba(0, 122, 255, 0.08); }
-.packet-list tr.proto-arp { background: rgba(255, 204, 0, 0.1); }
-.packet-list tr.proto-icmp { background: rgba(255, 149, 0, 0.08); }
-.packet-list tr.proto-multicast { background: rgba(50, 173, 230, 0.08); }
-.packet-list tr.proto-routing { background: rgba(255, 149, 0, 0.1); }
-.packet-list tr.proto-network { background: rgba(52, 199, 89, 0.06); }
-.packet-list tr.proto-l2 { background: rgba(255, 204, 0, 0.08); }
-.packet-list tr.proto-security { background: rgba(255, 59, 48, 0.08); }
-.packet-list tr.proto-tls { background: rgba(90, 200, 250, 0.08); }
+/* Protocol Colors - Dark theme */
+.packet-list tr.proto-tcp { background: rgba(191, 90, 242, 0.15); }
+.packet-list tr.proto-udp { background: rgba(10, 132, 255, 0.12); }
+.packet-list tr.proto-http { background: rgba(48, 209, 88, 0.15); }
+.packet-list tr.proto-https { background: rgba(100, 210, 255, 0.12); }
+.packet-list tr.proto-dns { background: rgba(10, 132, 255, 0.15); }
+.packet-list tr.proto-arp { background: rgba(255, 214, 10, 0.12); }
+.packet-list tr.proto-icmp { background: rgba(255, 159, 10, 0.12); }
+.packet-list tr.proto-multicast { background: rgba(64, 200, 224, 0.12); }
+.packet-list tr.proto-routing { background: rgba(255, 159, 10, 0.15); }
+.packet-list tr.proto-network { background: rgba(48, 209, 88, 0.1); }
+.packet-list tr.proto-l2 { background: rgba(255, 214, 10, 0.1); }
+.packet-list tr.proto-security { background: rgba(255, 69, 58, 0.15); }
+.packet-list tr.proto-tls { background: rgba(100, 210, 255, 0.1); }
 
 .packet-list tr.proto-tcp .proto-badge { color: var(--accent-purple); }
 .packet-list tr.proto-udp .proto-badge { color: var(--accent-primary); }
 .packet-list tr.proto-http .proto-badge { color: var(--accent-green); }
 .packet-list tr.proto-dns .proto-badge { color: var(--accent-primary); }
-.packet-list tr.proto-arp .proto-badge { color: #b8860b; }
+.packet-list tr.proto-arp .proto-badge { color: var(--accent-yellow); }
 .packet-list tr.proto-icmp .proto-badge { color: var(--accent-orange); }
 .packet-list tr.proto-multicast .proto-badge { color: var(--accent-cyan); }
 .packet-list tr.proto-routing .proto-badge { color: var(--accent-orange); }
 .packet-list tr.proto-network .proto-badge { color: var(--accent-green); }
-.packet-list tr.proto-l2 .proto-badge { color: #b8860b; }
+.packet-list tr.proto-l2 .proto-badge { color: var(--accent-yellow); }
 .packet-list tr.proto-security .proto-badge { color: var(--accent-red); }
 .packet-list tr.proto-tls .proto-badge { color: var(--accent-cyan); }
 
@@ -872,9 +887,7 @@ body {
     justify-content: space-between;
     align-items: center;
     padding: 10px 24px;
-    background: rgba(255, 255, 255, 0.8);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    background: var(--bg-secondary);
     border-top: 1px solid var(--border-light);
     font-size: 0.85em;
     color: var(--text-secondary);
@@ -919,8 +932,8 @@ body {
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.4);
-    backdrop-filter: blur(4px);
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -934,6 +947,7 @@ body {
     min-width: 420px;
     max-width: 90%;
     box-shadow: var(--shadow-lg);
+    border: 1px solid var(--border-color);
 }
 
 .modal-content h3 {
@@ -955,8 +969,8 @@ body {
     align-items: flex-start;
     gap: 4px;
     padding: 14px 18px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-light);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
     border-radius: 12px;
     margin-bottom: 10px;
     cursor: pointer;
@@ -965,7 +979,7 @@ body {
 
 .interface-item:hover {
     border-color: var(--accent-primary);
-    background: var(--bg-card);
+    background: var(--bg-secondary);
     box-shadow: var(--shadow-sm);
 }
 
@@ -1094,7 +1108,7 @@ body {
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(255, 255, 255, 0.8);
+    background: rgba(28, 28, 30, 0.8);
     display: flex;
     align-items: center;
     justify-content: center;
