@@ -77,6 +77,22 @@
                         </tbody>
                     </table>
                 </div>
+                <div class="pagination" id="pagination">
+                    <button class="btn btn-small" id="btn-first-page" title="처음">«</button>
+                    <button class="btn btn-small" id="btn-prev-page" title="이전">‹</button>
+                    <span class="page-info">
+                        <span id="current-page">1</span> / <span id="total-pages">1</span>
+                        <span class="page-total">(<span id="filtered-count">0</span>개)</span>
+                    </span>
+                    <button class="btn btn-small" id="btn-next-page" title="다음">›</button>
+                    <button class="btn btn-small" id="btn-last-page" title="마지막">»</button>
+                    <select id="page-size" class="page-size-select">
+                        <option value="100">100개</option>
+                        <option value="200">200개</option>
+                        <option value="500">500개</option>
+                        <option value="1000">1000개</option>
+                    </select>
+                </div>
             </div>
 
             <!-- Right Panel - Visualization -->

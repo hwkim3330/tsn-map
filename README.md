@@ -116,13 +116,34 @@ tsn-map/
 ## Filter Syntax
 
 ```
-tcp                    # TCP 패킷만
-udp                    # UDP 패킷만
-arp                    # ARP 패킷만
-icmp                   # ICMP 패킷만
-dns                    # DNS 패킷 (포트 53)
-http                   # HTTP 패킷 (포트 80)
-https                  # HTTPS 패킷 (포트 443)
+# L3/L4 Protocols
+tcp                    # TCP 패킷
+udp                    # UDP 패킷
+icmp                   # ICMP/ICMPv6 패킷
+igmp                   # IGMP (멀티캐스트)
+vrrp                   # VRRP (가상 라우터)
+ospf                   # OSPF (라우팅)
+gre                    # GRE 터널
+esp                    # IPsec ESP
+sctp                   # SCTP
+
+# L2 EtherTypes
+arp                    # ARP 패킷
+ipv4                   # IPv4 패킷
+ipv6                   # IPv6 패킷
+ptp                    # PTP (IEEE 1588)
+lldp                   # LLDP
+rrcp                   # Realtek RRCP
+loopback               # Loop Detection
+macsec                 # MACsec
+vlan                   # VLAN 태그된 패킷
+
+# Application Layer
+dns                    # DNS (포트 53)
+http                   # HTTP (포트 80)
+https                  # HTTPS (포트 443)
+
+# IP/Port Filters
 ip.addr==192.168.1.1   # 특정 IP 주소
 ip.src==10.0.0.1       # 출발지 IP
 ip.dst==10.0.0.1       # 목적지 IP

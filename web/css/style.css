@@ -323,6 +323,55 @@ body {
     padding-left: 9px;
 }
 
+/* Pagination */
+.pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.page-info {
+    font-size: 0.85em;
+    color: var(--text-secondary);
+    min-width: 120px;
+    text-align: center;
+}
+
+.page-info #current-page,
+.page-info #total-pages {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.page-total {
+    color: var(--text-secondary);
+    font-size: 0.9em;
+}
+
+.page-size-select {
+    padding: 4px 8px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 0.85em;
+    cursor: pointer;
+}
+
+.pagination .btn-small {
+    min-width: 32px;
+    padding: 6px 10px;
+}
+
+.pagination .btn-small:disabled {
+    opacity: 0.3;
+}
+
 /* Protocol Colors - Wireshark style */
 .packet-list tr.proto-tcp { background: rgba(228,211,244,0.1); }
 .packet-list tr.proto-udp { background: rgba(218,238,255,0.1); }
@@ -331,6 +380,12 @@ body {
 .packet-list tr.proto-dns { background: rgba(218,238,255,0.15); }
 .packet-list tr.proto-arp { background: rgba(250,240,215,0.1); }
 .packet-list tr.proto-icmp { background: rgba(252,224,255,0.1); }
+.packet-list tr.proto-multicast { background: rgba(186,225,255,0.1); }
+.packet-list tr.proto-routing { background: rgba(255,213,186,0.1); }
+.packet-list tr.proto-network { background: rgba(186,255,201,0.1); }
+.packet-list tr.proto-l2 { background: rgba(255,235,186,0.1); }
+.packet-list tr.proto-security { background: rgba(255,186,186,0.1); }
+.packet-list tr.proto-tls { background: rgba(199,234,255,0.12); }
 
 .packet-list tr.proto-tcp .proto-badge { color: #e4d3f4; }
 .packet-list tr.proto-udp .proto-badge { color: #daeeff; }
@@ -338,6 +393,12 @@ body {
 .packet-list tr.proto-dns .proto-badge { color: #85c1e9; }
 .packet-list tr.proto-arp .proto-badge { color: #faf0d7; }
 .packet-list tr.proto-icmp .proto-badge { color: #fce0ff; }
+.packet-list tr.proto-multicast .proto-badge { color: #bae1ff; }
+.packet-list tr.proto-routing .proto-badge { color: #ffd5ba; }
+.packet-list tr.proto-network .proto-badge { color: #baffc9; }
+.packet-list tr.proto-l2 .proto-badge { color: #ffebba; }
+.packet-list tr.proto-security .proto-badge { color: #ffbaba; }
+.packet-list tr.proto-tls .proto-badge { color: #c7eaff; }
 
 /* Tabs */
 .tabs {

@@ -23,6 +23,10 @@ const state = {
     filter: '',
     autoScroll: true,
     layoutMode: 'force',
+    // Pagination
+    currentPage: 1,
+    pageSize: 100,
+    totalPages: 1,
 };
 
 // Initialize Application
@@ -84,6 +88,17 @@ function setupEventListeners() {
         if (e.key === 'Enter') applyFilter();
     });
     document.getElementById('btn-apply-filter').addEventListener('click', applyFilter);
+
+    // Pagination
+    document.getElementById('btn-first-page').addEventListener('click', () => goToPage(1));
+    document.getElementById('btn-prev-page').addEventListener('click', () => goToPage(state.currentPage - 1));
+    document.getElementById('btn-next-page').addEventListener('click', () => goToPage(state.currentPage + 1));
+    document.getElementById('btn-last-page').addEventListener('click', () => goToPage(state.totalPages));
+    document.getElementById('page-size').addEventListener('change', (e) => {
+        state.pageSize = parseInt(e.target.value);
+        state.currentPage = 1;
+        renderPacketList();
+    });
 
     // Topology controls
     document.getElementById('btn-layout-force').addEventListener('click', () => setLayout('force'));
@@ -247,10 +262,27 @@ function processPacket(packet, live = true) {
     }
 
     if (live) {
-        // Apply filter and append if matches
+        // Apply filter and update pagination
         if (matchesFilter(packet, state.filter)) {
             state.filteredPackets.push(packet);
-            appendPacketRow(packet);
+
+            // Update pagination state
+            const newTotalPages = Math.max(1, Math.ceil(state.filteredPackets.length / state.pageSize));
+
+            // If on last page, append the new packet row
+            if (state.currentPage === state.totalPages) {
+                // Check if we need to move to new page
+                const currentPagePackets = state.filteredPackets.length - (state.currentPage - 1) * state.pageSize;
+                if (currentPagePackets <= state.pageSize) {
+                    appendPacketRow(packet, true);
+                } else {
+                    // Page is full, update total pages
+                    state.totalPages = newTotalPages;
+                }
+            }
+
+            state.totalPages = newTotalPages;
+            updatePaginationUI();
         }
         updateCounters();
     }
@@ -343,12 +375,48 @@ function renderPacketList() {
         ? state.packets.filter(p => matchesFilter(p, state.filter))
         : [...state.packets];
 
-    // Render last 1000 packets for performance
-    const displayPackets = state.filteredPackets.slice(-1000);
-    displayPackets.forEach(packet => appendPacketRow(packet));
+    // Calculate pagination
+    const totalPackets = state.filteredPackets.length;
+    state.totalPages = Math.max(1, Math.ceil(totalPackets / state.pageSize));
+
+    // Adjust current page if out of bounds
+    if (state.currentPage > state.totalPages) {
+        state.currentPage = state.totalPages;
+    }
+
+    // Get packets for current page
+    const startIdx = (state.currentPage - 1) * state.pageSize;
+    const endIdx = startIdx + state.pageSize;
+    const displayPackets = state.filteredPackets.slice(startIdx, endIdx);
+
+    displayPackets.forEach(packet => appendPacketRow(packet, false));
+
+    // Update pagination UI
+    updatePaginationUI();
 }
 
-function appendPacketRow(packet) {
+function goToPage(page) {
+    if (page < 1 || page > state.totalPages) return;
+    state.currentPage = page;
+    renderPacketList();
+
+    // Scroll to top of packet list
+    document.querySelector('.packet-list').scrollTop = 0;
+}
+
+function updatePaginationUI() {
+    document.getElementById('current-page').textContent = state.currentPage;
+    document.getElementById('total-pages').textContent = state.totalPages;
+    document.getElementById('filtered-count').textContent = state.filteredPackets.length.toLocaleString();
+
+    // Enable/disable buttons
+    document.getElementById('btn-first-page').disabled = state.currentPage <= 1;
+    document.getElementById('btn-prev-page').disabled = state.currentPage <= 1;
+    document.getElementById('btn-next-page').disabled = state.currentPage >= state.totalPages;
+    document.getElementById('btn-last-page').disabled = state.currentPage >= state.totalPages;
+}
+
+function appendPacketRow(packet, live = false) {
     const tbody = document.getElementById('packet-tbody');
     const row = document.createElement('tr');
 
@@ -372,8 +440,8 @@ function appendPacketRow(packet) {
 
     tbody.appendChild(row);
 
-    // Auto-scroll
-    if (state.autoScroll) {
+    // Auto-scroll only for live packets on last page
+    if (live && state.autoScroll && state.currentPage === state.totalPages) {
         const packetList = document.querySelector('.packet-list');
         packetList.scrollTop = packetList.scrollHeight;
     }
@@ -383,26 +451,34 @@ function getProtocolClass(packet) {
     const proto = (packet.info.protocol || packet.info.ethertype_name || '').toLowerCase();
     if (proto === 'tcp') return 'proto-tcp';
     if (proto === 'udp') return 'proto-udp';
-    if (proto === 'arp') return 'proto-arp';
-    if (proto === 'icmp') return 'proto-icmp';
+    if (proto === 'arp' || proto === 'rarp') return 'proto-arp';
+    if (proto === 'icmp' || proto === 'icmpv6') return 'proto-icmp';
     if (proto === 'dns') return 'proto-dns';
     if (proto === 'http' || proto === 'https') return 'proto-http';
     if (proto === 'tls' || proto === 'ssl') return 'proto-tls';
+    if (proto === 'igmp' || proto === 'pim') return 'proto-multicast';
+    if (proto === 'vrrp' || proto === 'ospf' || proto === 'eigrp') return 'proto-routing';
+    if (proto === 'ptp' || proto === 'lldp') return 'proto-network';
+    if (proto === 'rrcp' || proto === 'loopback') return 'proto-l2';
+    if (proto === 'esp' || proto === 'ah' || proto === 'macsec') return 'proto-security';
     return '';
 }
 
 function getPacketInfo(packet) {
     const info = packet.info;
 
-    // TCP flags
-    if (info.protocol === 'TCP' && info.tcp_flags) {
+    // TCP with ports/flags
+    if (info.protocol === 'TCP' && info.src_port && info.dst_port) {
         const flags = [];
-        if (info.tcp_flags.syn) flags.push('SYN');
-        if (info.tcp_flags.ack) flags.push('ACK');
-        if (info.tcp_flags.fin) flags.push('FIN');
-        if (info.tcp_flags.rst) flags.push('RST');
-        if (info.tcp_flags.psh) flags.push('PSH');
-        return `${info.src_port} → ${info.dst_port} [${flags.join(',')}] Seq=${info.seq_num || 0}`;
+        if (info.tcp_flags) {
+            if (info.tcp_flags.syn) flags.push('SYN');
+            if (info.tcp_flags.ack) flags.push('ACK');
+            if (info.tcp_flags.fin) flags.push('FIN');
+            if (info.tcp_flags.rst) flags.push('RST');
+            if (info.tcp_flags.psh) flags.push('PSH');
+        }
+        const flagStr = flags.length ? ` [${flags.join(',')}]` : '';
+        return `${info.src_port} → ${info.dst_port}${flagStr}`;
     }
 
     // UDP with ports
@@ -410,7 +486,11 @@ function getPacketInfo(packet) {
         // Check for known protocols
         if (info.dst_port === 53 || info.src_port === 53) return `DNS ${info.src_port} → ${info.dst_port}`;
         if (info.dst_port === 67 || info.dst_port === 68) return `DHCP ${info.src_port} → ${info.dst_port}`;
-        return `${info.src_port} → ${info.dst_port} Len=${packet.length - 42}`;
+        if (info.dst_port === 123 || info.src_port === 123) return `NTP ${info.src_port} → ${info.dst_port}`;
+        if (info.dst_port === 319 || info.dst_port === 320) return `PTP ${info.src_port} → ${info.dst_port}`;
+        if (info.dst_port === 514 || info.src_port === 514) return `Syslog ${info.src_port} → ${info.dst_port}`;
+        if (info.dst_port === 161 || info.src_port === 161) return `SNMP ${info.src_port} → ${info.dst_port}`;
+        return `${info.src_port} → ${info.dst_port}`;
     }
 
     // ARP
@@ -419,17 +499,55 @@ function getPacketInfo(packet) {
     }
 
     // ICMP
-    if (info.protocol === 'ICMP') {
-        const types = { 0: 'Echo Reply', 8: 'Echo Request', 3: 'Dest Unreachable', 11: 'TTL Exceeded' };
-        return types[info.icmp_type] || `Type ${info.icmp_type}`;
+    if (info.protocol === 'ICMP' || info.protocol === 'ICMPv6') {
+        const types = { 0: 'Echo Reply', 8: 'Echo Request', 3: 'Dest Unreachable', 11: 'TTL Exceeded', 5: 'Redirect' };
+        return types[info.icmp_type] || `Type ${info.icmp_type || 'N/A'}`;
     }
 
-    // VLAN
+    // IGMP
+    if (info.protocol === 'IGMP') {
+        return `Membership ${info.dst_ip || 'Report'}`;
+    }
+
+    // VRRP
+    if (info.protocol === 'VRRP') {
+        return `Virtual Router ${info.dst_ip || 'Advertisement'}`;
+    }
+
+    // Routing protocols
+    if (info.protocol === 'OSPF') {
+        return `OSPF Router ${info.src_ip}`;
+    }
+
+    // PTP (Layer 2)
+    if (info.ethertype_name === 'PTP' || info.is_ptp) {
+        return packet.tsn_info?.ptp_info?.message_type || 'PTP Message';
+    }
+
+    // LLDP
+    if (info.ethertype_name === 'LLDP') {
+        return `LLDP from ${info.src_mac}`;
+    }
+
+    // L2 protocols
+    if (info.ethertype_name === 'RRCP') {
+        return `Realtek Remote Control`;
+    }
+
+    if (info.ethertype_name === 'Loopback') {
+        return `Loop Detection Frame`;
+    }
+
+    // VLAN info
     if (info.vlan_id) {
-        return `VLAN ${info.vlan_id} PCP ${info.vlan_pcp}`;
+        const vlanInfo = `VLAN ${info.vlan_id} PCP ${info.vlan_pcp}`;
+        if (info.protocol) {
+            return `${vlanInfo} → ${info.protocol}`;
+        }
+        return vlanInfo;
     }
 
-    return info.ethertype_name || '-';
+    return info.ethertype_name || info.protocol || '-';
 }
 
 function formatTime(timestamp) {
@@ -454,12 +572,33 @@ function matchesFilter(packet, filter) {
 
     const f = filter.toLowerCase();
     const info = packet.info;
+    const proto = (info.protocol || '').toLowerCase();
+    const ethertype = (info.ethertype_name || '').toLowerCase();
 
-    // Protocol filter
-    if (f === 'tcp') return info.protocol === 'TCP';
-    if (f === 'udp') return info.protocol === 'UDP';
-    if (f === 'arp') return info.ethertype_name === 'ARP';
-    if (f === 'icmp') return info.protocol === 'ICMP';
+    // Protocol filter (L3/L4)
+    if (f === 'tcp') return proto === 'tcp';
+    if (f === 'udp') return proto === 'udp';
+    if (f === 'icmp') return proto === 'icmp' || proto === 'icmpv6';
+    if (f === 'igmp') return proto === 'igmp';
+    if (f === 'vrrp') return proto === 'vrrp';
+    if (f === 'ospf') return proto === 'ospf';
+    if (f === 'gre') return proto === 'gre';
+    if (f === 'esp') return proto === 'esp';
+    if (f === 'sctp') return proto === 'sctp';
+
+    // EtherType filter (L2)
+    if (f === 'arp') return ethertype === 'arp';
+    if (f === 'rarp') return ethertype === 'rarp';
+    if (f === 'ipv4') return ethertype === 'ipv4';
+    if (f === 'ipv6') return ethertype === 'ipv6';
+    if (f === 'ptp') return ethertype === 'ptp' || info.is_ptp;
+    if (f === 'lldp') return ethertype === 'lldp';
+    if (f === 'rrcp') return ethertype === 'rrcp';
+    if (f === 'loopback') return ethertype === 'loopback';
+    if (f === 'macsec') return ethertype === 'macsec';
+    if (f === 'vlan') return info.vlan_id !== null && info.vlan_id !== undefined;
+
+    // Application layer
     if (f === 'dns') return info.src_port === 53 || info.dst_port === 53;
     if (f === 'http') return info.dst_port === 80 || info.src_port === 80;
     if (f === 'https' || f === 'tls') return info.dst_port === 443 || info.src_port === 443;
@@ -1218,14 +1357,24 @@ function clearAll() {
     state.protocols.clear();
     state.conversations.clear();
     state.stats = { packets_captured: 0, bytes_captured: 0, start_time: null };
+    state.selectedPacket = null;
+
+    // Reset pagination
+    state.currentPage = 1;
+    state.totalPages = 1;
 
     document.getElementById('packet-tbody').innerHTML = '';
     updateCounters();
+    updatePaginationUI();
     updateAllCharts();
     renderHostsList();
 
     document.getElementById('capture-file').textContent = '캡처 파일 없음';
     document.getElementById('selected-packet-info').textContent = '-';
+
+    // Reset detail panel
+    document.getElementById('detail-placeholder').style.display = 'flex';
+    document.getElementById('detail-content').style.display = 'none';
 }
 
 // Utility

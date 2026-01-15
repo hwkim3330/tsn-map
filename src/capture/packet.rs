@@ -133,13 +133,26 @@ impl CapturedPacket {
             0x0806 => "ARP".to_string(),
             0x86DD => "IPv6".to_string(),
             0x8100 => "VLAN".to_string(),
+            0x88A8 => "QinQ".to_string(),          // 802.1ad Provider Bridging
             0x88F7 => "PTP".to_string(),
             0x22F0 => "802.1Qat SRP".to_string(),
             0x88B8 => "GOOSE".to_string(),
             0x88BA => "SV".to_string(),
             0x88CC => "LLDP".to_string(),
-            0x88E5 => "802.1AE MACsec".to_string(),
+            0x88E5 => "MACsec".to_string(),        // 802.1AE
             0x893A => "IEEE 1905".to_string(),
+            0x8899 => "RRCP".to_string(),          // Realtek Remote Control Protocol
+            0x9000 => "Loopback".to_string(),      // Configuration Test Protocol (loop detection)
+            0x0842 => "WoL".to_string(),           // Wake-on-LAN
+            0x8035 => "RARP".to_string(),          // Reverse ARP
+            0x809B => "AppleTalk".to_string(),
+            0x80F3 => "AARP".to_string(),          // AppleTalk ARP
+            0x8137 => "IPX".to_string(),
+            0x8863 => "PPPoE-D".to_string(),       // PPPoE Discovery
+            0x8864 => "PPPoE-S".to_string(),       // PPPoE Session
+            0x88E1 => "HomePlug".to_string(),
+            0x8902 => "CFM".to_string(),           // 802.1ag Connectivity Fault Management
+            0x22EA => "SRP".to_string(),           // Stream Reservation Protocol
             _ => format!("0x{:04X}", ethertype),
         };
 
@@ -159,10 +172,27 @@ impl CapturedPacket {
 
             let protocol = data[ip_offset + 9];
             info.protocol = Some(match protocol {
+                0 => "HOPOPT".to_string(),       // IPv6 Hop-by-Hop Option
                 1 => "ICMP".to_string(),
+                2 => "IGMP".to_string(),         // Internet Group Management Protocol
+                4 => "IP-in-IP".to_string(),     // IP encapsulation
                 6 => "TCP".to_string(),
                 17 => "UDP".to_string(),
-                _ => format!("{}", protocol),
+                41 => "IPv6".to_string(),        // IPv6 encapsulation
+                43 => "IPv6-Route".to_string(),  // IPv6 Routing Header
+                44 => "IPv6-Frag".to_string(),   // IPv6 Fragment Header
+                47 => "GRE".to_string(),         // Generic Routing Encapsulation
+                50 => "ESP".to_string(),         // Encapsulating Security Payload
+                51 => "AH".to_string(),          // Authentication Header
+                58 => "ICMPv6".to_string(),
+                59 => "IPv6-NoNxt".to_string(),  // IPv6 No Next Header
+                60 => "IPv6-Opts".to_string(),   // IPv6 Destination Options
+                88 => "EIGRP".to_string(),       // Enhanced Interior Gateway Routing Protocol
+                89 => "OSPF".to_string(),        // Open Shortest Path First
+                103 => "PIM".to_string(),        // Protocol Independent Multicast
+                112 => "VRRP".to_string(),       // Virtual Router Redundancy Protocol
+                132 => "SCTP".to_string(),       // Stream Control Transmission Protocol
+                _ => format!("Proto({})", protocol),
             });
 
             // Parse transport layer
@@ -187,10 +217,17 @@ impl CapturedPacket {
 
             let next_header = data[ip_offset + 6];
             info.protocol = Some(match next_header {
+                0 => "HOPOPT".to_string(),       // Hop-by-Hop Options
                 6 => "TCP".to_string(),
                 17 => "UDP".to_string(),
+                43 => "IPv6-Route".to_string(),  // Routing Header
+                44 => "IPv6-Frag".to_string(),   // Fragment Header
+                50 => "ESP".to_string(),         // Encapsulating Security Payload
+                51 => "AH".to_string(),          // Authentication Header
                 58 => "ICMPv6".to_string(),
-                _ => format!("{}", next_header),
+                59 => "IPv6-NoNxt".to_string(),  // No Next Header
+                60 => "IPv6-Opts".to_string(),   // Destination Options
+                _ => format!("Proto({})", next_header),
             });
         }
 
