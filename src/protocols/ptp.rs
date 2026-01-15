@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
-use crate::capture::CapturedPacket;
+use crate::capture::{CapturedPacket, PtpInfo};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PtpStats {
@@ -100,7 +100,7 @@ impl PtpAnalyzer {
         }
     }
 
-    fn process_sync(&mut self, packet: &CapturedPacket, ptp_info: &crate::capture::PtpInfo) {
+    fn process_sync(&mut self, packet: &CapturedPacket, ptp_info: &PtpInfo) {
         // Track sync interval
         if let Some(last_time) = self.last_sync_time {
             let interval = (packet.timestamp - last_time).num_microseconds().unwrap_or(0) as f64 / 1000.0;
@@ -127,8 +127,8 @@ impl PtpAnalyzer {
         }
     }
 
-    fn process_follow_up(&mut self, _packet: &CapturedPacket, ptp_info: &crate::capture::PtpInfo) {
-        if let Some(sync_pair) = self.sync_pairs.get_mut(&ptp_info.sequence_id) {
+    fn process_follow_up(&mut self, _packet: &CapturedPacket, ptp_info: &PtpInfo) {
+        if self.sync_pairs.contains_key(&ptp_info.sequence_id) {
             // Calculate offset from correction field (nanoseconds)
             let offset_ns = ptp_info.correction_field as f64 / 65536.0;
             self.offset_samples.push(offset_ns);
@@ -145,7 +145,7 @@ impl PtpAnalyzer {
         }
     }
 
-    fn process_delay_resp(&mut self, _packet: &CapturedPacket, ptp_info: &crate::capture::PtpInfo) {
+    fn process_delay_resp(&mut self, _packet: &CapturedPacket, ptp_info: &PtpInfo) {
         // Extract delay from correction field
         let delay_ns = (ptp_info.correction_field as f64 / 65536.0).abs();
         if delay_ns > 0.0 && delay_ns < 1_000_000_000.0 {
@@ -163,14 +163,14 @@ impl PtpAnalyzer {
         }
     }
 
-    fn process_announce(&mut self, _packet: &CapturedPacket, ptp_info: &crate::capture::PtpInfo) {
+    fn process_announce(&mut self, _packet: &CapturedPacket, ptp_info: &PtpInfo) {
         // Set grandmaster from announce source
         if self.stats.grandmaster_id.is_none() {
             self.stats.grandmaster_id = Some(ptp_info.source_port_identity.clone());
         }
     }
 
-    fn update_clock(&mut self, packet: &CapturedPacket, ptp_info: &crate::capture::PtpInfo) {
+    fn update_clock(&mut self, packet: &CapturedPacket, ptp_info: &PtpInfo) {
         let clock_id = ptp_info.source_port_identity.clone();
 
         let entry = self.clocks.entry(clock_id.clone()).or_insert_with(|| {

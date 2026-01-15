@@ -1,18 +1,16 @@
 use std::sync::Arc;
 use std::path::PathBuf;
 use axum::{
-    extract::{State, Query, Path},
+    extract::{State, Query},
     response::sse::{Event, Sse},
-    http::StatusCode,
     Json,
 };
-use futures::stream::{self, Stream};
+use futures::stream::Stream;
 use serde::{Deserialize, Serialize};
-use tokio_stream::StreamExt;
 
 use crate::AppState;
 use crate::capture::{self, CapturedPacket, PcapHandler};
-use crate::protocols::{ProtocolAnalyzer, TsnStream, TsnFlow};
+use crate::protocols::{TsnStream, TsnFlow};
 use crate::topology::NetworkTopology;
 
 #[derive(Serialize)]
@@ -166,11 +164,7 @@ pub async fn get_packets(
     let offset = params.offset.unwrap_or(0);
     let limit = params.limit.unwrap_or(100).min(1000);
 
-    let packets: Vec<CapturedPacket> = capture
-        .get_packets(offset, limit)
-        .into_iter()
-        .cloned()
-        .collect();
+    let packets = capture.get_packets(offset, limit);
 
     Json(PacketsResponse {
         total: capture.get_packet_count(),
@@ -209,7 +203,7 @@ pub async fn get_topology(
 
 // POST /api/topology/scan
 pub async fn scan_topology(
-    State(state): State<Arc<AppState>>,
+    State(_state): State<Arc<AppState>>,
 ) -> Json<ApiResponse<String>> {
     // Topology is updated automatically from packet capture
     // This endpoint can trigger active scanning in the future
@@ -238,11 +232,7 @@ pub async fn save_pcap(
     Json(request): Json<SavePcapRequest>,
 ) -> Json<ApiResponse<SavePcapResponse>> {
     let capture = state.capture_manager.read().await;
-    let packets: Vec<CapturedPacket> = capture
-        .get_packets(0, capture.get_packet_count())
-        .into_iter()
-        .cloned()
-        .collect();
+    let packets = capture.get_packets(0, capture.get_packet_count());
     drop(capture);
 
     let path = PathBuf::from(&request.filename);

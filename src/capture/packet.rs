@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc};
-use etherparse::SlicedPacket;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CapturedPacket {
@@ -40,7 +39,7 @@ pub struct TsnInfo {
     pub cbs_info: Option<CbsInfo>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum TsnType {
     Ptp,           // IEEE 1588 Precision Time Protocol
     Cbs,           // IEEE 802.1Qav Credit-Based Shaper
@@ -147,44 +146,52 @@ impl CapturedPacket {
         // Check for PTP
         info.is_ptp = ethertype == 0x88F7 || Self::is_ptp_udp(data, offset + 2);
 
-        // Parse IP layer using etherparse
-        if let Ok(packet) = SlicedPacket::from_ethernet(&data) {
-            if let Some(ip) = packet.ip {
-                match ip {
-                    etherparse::InternetSlice::Ipv4(ipv4, _) => {
-                        info.src_ip = Some(format!("{}", ipv4.source_addr()));
-                        info.dst_ip = Some(format!("{}", ipv4.destination_addr()));
-                        info.protocol = Some(match ipv4.protocol().0 {
-                            1 => "ICMP".to_string(),
-                            6 => "TCP".to_string(),
-                            17 => "UDP".to_string(),
-                            _ => format!("{}", ipv4.protocol().0),
-                        });
-                    }
-                    etherparse::InternetSlice::Ipv6(ipv6, _) => {
-                        info.src_ip = Some(format!("{}", ipv6.source_addr()));
-                        info.dst_ip = Some(format!("{}", ipv6.destination_addr()));
-                    }
-                }
-            }
+        // Parse IP layer manually
+        let ip_offset = offset + 2;
+        if ethertype == 0x0800 && data.len() >= ip_offset + 20 {
+            // IPv4
+            info.src_ip = Some(format!("{}.{}.{}.{}",
+                data[ip_offset + 12], data[ip_offset + 13],
+                data[ip_offset + 14], data[ip_offset + 15]));
+            info.dst_ip = Some(format!("{}.{}.{}.{}",
+                data[ip_offset + 16], data[ip_offset + 17],
+                data[ip_offset + 18], data[ip_offset + 19]));
 
-            if let Some(transport) = packet.transport {
-                match transport {
-                    etherparse::TransportSlice::Tcp(tcp) => {
-                        info.src_port = Some(tcp.source_port());
-                        info.dst_port = Some(tcp.destination_port());
-                    }
-                    etherparse::TransportSlice::Udp(udp) => {
-                        info.src_port = Some(udp.source_port());
-                        info.dst_port = Some(udp.destination_port());
-                        // Check for PTP over UDP
-                        if udp.destination_port() == 319 || udp.destination_port() == 320 {
-                            info.is_ptp = true;
-                        }
-                    }
-                    _ => {}
+            let protocol = data[ip_offset + 9];
+            info.protocol = Some(match protocol {
+                1 => "ICMP".to_string(),
+                6 => "TCP".to_string(),
+                17 => "UDP".to_string(),
+                _ => format!("{}", protocol),
+            });
+
+            // Parse transport layer
+            let ihl = (data[ip_offset] & 0x0F) as usize * 4;
+            let transport_offset = ip_offset + ihl;
+
+            if data.len() >= transport_offset + 4 {
+                info.src_port = Some(u16::from_be_bytes([data[transport_offset], data[transport_offset + 1]]));
+                info.dst_port = Some(u16::from_be_bytes([data[transport_offset + 2], data[transport_offset + 3]]));
+
+                // Check for PTP over UDP
+                if protocol == 17 && (info.dst_port == Some(319) || info.dst_port == Some(320)) {
+                    info.is_ptp = true;
                 }
             }
+        } else if ethertype == 0x86DD && data.len() >= ip_offset + 40 {
+            // IPv6
+            let src = &data[ip_offset + 8..ip_offset + 24];
+            let dst = &data[ip_offset + 24..ip_offset + 40];
+            info.src_ip = Some(format_ipv6(src));
+            info.dst_ip = Some(format_ipv6(dst));
+
+            let next_header = data[ip_offset + 6];
+            info.protocol = Some(match next_header {
+                6 => "TCP".to_string(),
+                17 => "UDP".to_string(),
+                58 => "ICMPv6".to_string(),
+                _ => format!("{}", next_header),
+            });
         }
 
         // Check if TSN-related
@@ -201,7 +208,8 @@ impl CapturedPacket {
 
         // Check IP protocol is UDP (17)
         if data.len() > ip_offset + 9 && data[ip_offset + 9] == 17 {
-            let udp_offset = ip_offset + 20; // Assume no IP options
+            let ihl = (data[ip_offset] & 0x0F) as usize * 4;
+            let udp_offset = ip_offset + ihl;
             if data.len() >= udp_offset + 4 {
                 let dst_port = u16::from_be_bytes([data[udp_offset + 2], data[udp_offset + 3]]);
                 return dst_port == 319 || dst_port == 320;
@@ -309,4 +317,11 @@ impl CapturedPacket {
             correction_field: correction,
         })
     }
+}
+
+fn format_ipv6(bytes: &[u8]) -> String {
+    let parts: Vec<String> = bytes.chunks(2)
+        .map(|c| format!("{:02x}{:02x}", c[0], c[1]))
+        .collect();
+    parts.join(":")
 }

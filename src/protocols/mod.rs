@@ -10,7 +10,7 @@ pub use frer::{FrerAnalyzer, FrerStats};
 
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
-use crate::capture::CapturedPacket;
+use crate::capture::{CapturedPacket, TsnType};
 
 /// TSN Stream information
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -79,9 +79,9 @@ impl ProtocolAnalyzer {
 
             // Process by TSN type
             match tsn_info.tsn_type {
-                crate::capture::TsnType::Cbs => self.cbs.process_packet(packet),
-                crate::capture::TsnType::Tas => self.tas.process_packet(packet),
-                crate::capture::TsnType::Frer => self.frer.process_packet(packet),
+                TsnType::Cbs => self.cbs.process_packet(packet),
+                TsnType::Tas => self.tas.process_packet(packet),
+                TsnType::Frer => self.frer.process_packet(packet),
                 _ => {}
             }
         }

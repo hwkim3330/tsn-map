@@ -90,37 +90,37 @@ impl TopologyManager {
     fn init_oui_database(&mut self) {
         // Common networking and TSN equipment vendors
         let ouis = vec![
-            ("00:1A:6B", "Microchip Technology"),
+            ("00:1a:6b", "Microchip Technology"),
             ("00:04:25", "Microchip Technology"),
-            ("D8:80:39", "Microchip Technology"),
-            ("00:1E:C0", "Microchip Technology"),
-            ("00:60:6E", "DLOG"),
-            ("00:0D:B9", "PC Engines"),
-            ("00:1B:21", "Intel"),
-            ("00:1F:C6", "Intel"),
-            ("3C:FD:FE", "Intel"),
-            ("A0:36:9F", "Intel"),
-            ("00:1C:73", "Arista"),
-            ("00:1D:B5", "Juniper"),
-            ("00:17:CB", "Juniper"),
-            ("00:1E:0B", "Hewlett Packard"),
-            ("00:25:B3", "Hewlett Packard"),
-            ("00:1F:29", "Hewlett Packard"),
+            ("d8:80:39", "Microchip Technology"),
+            ("00:1e:c0", "Microchip Technology"),
+            ("00:60:6e", "DLOG"),
+            ("00:0d:b9", "PC Engines"),
+            ("00:1b:21", "Intel"),
+            ("00:1f:c6", "Intel"),
+            ("3c:fd:fe", "Intel"),
+            ("a0:36:9f", "Intel"),
+            ("00:1c:73", "Arista"),
+            ("00:1d:b5", "Juniper"),
+            ("00:17:cb", "Juniper"),
+            ("00:1e:0b", "Hewlett Packard"),
+            ("00:25:b3", "Hewlett Packard"),
+            ("00:1f:29", "Hewlett Packard"),
             ("00:50:56", "VMware"),
-            ("00:0C:29", "VMware"),
-            ("00:15:5D", "Microsoft Hyper-V"),
+            ("00:0c:29", "VMware"),
+            ("00:15:5d", "Microsoft Hyper-V"),
             ("52:54:00", "QEMU"),
             ("08:00:27", "VirtualBox"),
-            ("00:03:FF", "Microsoft"),
-            ("00:00:5E", "IANA (VRRP/HSRP)"),
-            ("01:00:5E", "IPv4 Multicast"),
+            ("00:03:ff", "Microsoft"),
+            ("00:00:5e", "IANA (VRRP/HSRP)"),
+            ("01:00:5e", "IPv4 Multicast"),
             ("33:33:00", "IPv6 Multicast"),
-            ("01:1B:19", "PTP Multicast"),
-            ("01:80:C2", "IEEE 802.1 Multicast"),
+            ("01:1b:19", "PTP Multicast"),
+            ("01:80:c2", "IEEE 802.1 Multicast"),
         ];
 
         for (oui, vendor) in ouis {
-            self.oui_database.insert(oui.to_lowercase(), vendor.to_string());
+            self.oui_database.insert(oui.to_string(), vendor.to_string());
         }
     }
 
@@ -141,10 +141,11 @@ impl TopologyManager {
     }
 
     fn update_node(&mut self, mac: &str, packet: &CapturedPacket, is_source: bool) {
-        let node = self.nodes.entry(mac.to_string()).or_insert_with(|| {
-            let vendor = self.lookup_vendor(mac);
-            let node_type = self.infer_node_type(mac, &vendor);
+        // Look up vendor first to avoid borrow issues
+        let vendor = self.lookup_vendor(mac);
+        let node_type = self.infer_node_type(mac, &vendor);
 
+        let node = self.nodes.entry(mac.to_string()).or_insert_with(|| {
             NetworkNode {
                 id: mac.to_string(),
                 mac_address: mac.to_string(),
@@ -267,9 +268,12 @@ impl TopologyManager {
 
     fn lookup_vendor(&self, mac: &str) -> Option<String> {
         let oui = mac.to_lowercase();
-        let oui = if oui.len() >= 8 { &oui[..8] } else { &oui };
-
-        self.oui_database.get(oui).cloned()
+        if oui.len() >= 8 {
+            let oui_prefix = &oui[..8];
+            self.oui_database.get(oui_prefix).cloned()
+        } else {
+            None
+        }
     }
 
     fn infer_node_type(&self, mac: &str, vendor: &Option<String>) -> NodeType {
