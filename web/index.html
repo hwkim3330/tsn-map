@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TSN-Map - Network Visualization Tool</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <svg width="32" height="32" viewBox="0 0 32 32">
+                    <circle cx="16" cy="16" r="14" fill="none" stroke="#00d4aa" stroke-width="2"/>
+                    <circle cx="16" cy="8" r="3" fill="#00d4aa"/>
+                    <circle cx="8" cy="20" r="3" fill="#00d4aa"/>
+                    <circle cx="24" cy="20" r="3" fill="#00d4aa"/>
+                    <line x1="16" y1="11" x2="10" y2="18" stroke="#00d4aa" stroke-width="2"/>
+                    <line x1="16" y1="11" x2="22" y2="18" stroke="#00d4aa" stroke-width="2"/>
+                    <line x1="11" y1="20" x2="21" y2="20" stroke="#00d4aa" stroke-width="2"/>
+                </svg>
+                <span>TSN-Map</span>
+            </div>
+            <div class="status-bar">
+                <span id="interface-name" class="interface">enp11s0</span>
+                <span id="capture-status" class="status status-stopped">Stopped</span>
+                <span id="packet-count" class="counter">0 packets</span>
+            </div>
+            <div class="controls">
+                <button id="btn-start" class="btn btn-primary">Start Capture</button>
+                <button id="btn-stop" class="btn btn-danger" disabled>Stop</button>
+                <button id="btn-clear" class="btn btn-secondary">Clear</button>
+                <button id="btn-save" class="btn btn-secondary">Save PCAP</button>
+                <button id="btn-load" class="btn btn-secondary">Load PCAP</button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Left Panel - Packet List -->
+            <div class="panel panel-left">
+                <div class="panel-header">
+                    <h3>Packets</h3>
+                    <div class="filter-bar">
+                        <input type="text" id="packet-filter" placeholder="Filter (e.g., ptp, vlan:100)">
+                        <select id="protocol-filter">
+                            <option value="">All Protocols</option>
+                            <option value="ptp">PTP</option>
+                            <option value="tsn">TSN</option>
+                            <option value="tcp">TCP</option>
+                            <option value="udp">UDP</option>
+                            <option value="arp">ARP</option>
+                            <option value="icmp">ICMP</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="packet-list" id="packet-list">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>No.</th>
+                                <th>Time</th>
+                                <th>Source</th>
+                                <th>Destination</th>
+                                <th>Protocol</th>
+                                <th>Length</th>
+                                <th>Info</th>
+                            </tr>
+                        </thead>
+                        <tbody id="packet-tbody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Center Panel - Visualization -->
+            <div class="panel panel-center">
+                <div class="tabs">
+                    <button class="tab active" data-tab="topology">Topology</button>
+                    <button class="tab" data-tab="traffic">Traffic</button>
+                    <button class="tab" data-tab="timeline">Timeline</button>
+                    <button class="tab" data-tab="ptp">PTP</button>
+                </div>
+
+                <div class="tab-content active" id="tab-topology">
+                    <div class="topology-controls">
+                        <button id="btn-refresh-topology" class="btn btn-small">Refresh</button>
+                        <label><input type="checkbox" id="show-tsn-only"> TSN Only</label>
+                        <label><input type="checkbox" id="show-labels"> Labels</label>
+                    </div>
+                    <div id="topology-graph"></div>
+                    <div class="topology-legend">
+                        <span class="legend-item"><span class="dot dot-host"></span> Host</span>
+                        <span class="legend-item"><span class="dot dot-switch"></span> Switch</span>
+                        <span class="legend-item"><span class="dot dot-tsn"></span> TSN Bridge</span>
+                        <span class="legend-item"><span class="dot dot-ptp"></span> PTP GM</span>
+                    </div>
+                </div>
+
+                <div class="tab-content" id="tab-traffic">
+                    <div class="chart-container">
+                        <canvas id="traffic-chart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="protocol-chart"></canvas>
+                    </div>
+                </div>
+
+                <div class="tab-content" id="tab-timeline">
+                    <div id="timeline-view"></div>
+                </div>
+
+                <div class="tab-content" id="tab-ptp">
+                    <div class="ptp-stats">
+                        <div class="stat-card">
+                            <h4>Grandmaster</h4>
+                            <span id="ptp-gm">-</span>
+                        </div>
+                        <div class="stat-card">
+                            <h4>Domain</h4>
+                            <span id="ptp-domain">-</span>
+                        </div>
+                        <div class="stat-card">
+                            <h4>Sync Interval</h4>
+                            <span id="ptp-interval">-</span>
+                        </div>
+                        <div class="stat-card">
+                            <h4>Avg Offset</h4>
+                            <span id="ptp-offset">-</span>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="ptp-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel - Details -->
+            <div class="panel panel-right">
+                <div class="panel-header">
+                    <h3>Details</h3>
+                </div>
+                <div class="detail-view" id="detail-view">
+                    <div class="detail-section">
+                        <h4>Statistics</h4>
+                        <div class="stats-grid">
+                            <div class="stat">
+                                <label>Packets</label>
+                                <span id="stat-packets">0</span>
+                            </div>
+                            <div class="stat">
+                                <label>Bytes</label>
+                                <span id="stat-bytes">0</span>
+                            </div>
+                            <div class="stat">
+                                <label>TSN Packets</label>
+                                <span id="stat-tsn">0</span>
+                            </div>
+                            <div class="stat">
+                                <label>PTP Packets</label>
+                                <span id="stat-ptp">0</span>
+                            </div>
+                            <div class="stat">
+                                <label>Rate</label>
+                                <span id="stat-rate">0 pps</span>
+                            </div>
+                            <div class="stat">
+                                <label>Bandwidth</label>
+                                <span id="stat-bandwidth">0 Mbps</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="detail-section" id="packet-detail" style="display:none;">
+                        <h4>Packet Detail</h4>
+                        <div class="packet-info">
+                            <div class="info-row">
+                                <label>Timestamp</label>
+                                <span id="detail-timestamp">-</span>
+                            </div>
+                            <div class="info-row">
+                                <label>Length</label>
+                                <span id="detail-length">-</span>
+                            </div>
+                            <div class="info-row">
+                                <label>Source MAC</label>
+                                <span id="detail-src-mac">-</span>
+                            </div>
+                            <div class="info-row">
+                                <label>Dest MAC</label>
+                                <span id="detail-dst-mac">-</span>
+                            </div>
+                            <div class="info-row">
+                                <label>EtherType</label>
+                                <span id="detail-ethertype">-</span>
+                            </div>
+                            <div class="info-row">
+                                <label>VLAN</label>
+                                <span id="detail-vlan">-</span>
+                            </div>
+                            <div class="info-row">
+                                <label>PCP</label>
+                                <span id="detail-pcp">-</span>
+                            </div>
+                            <div class="info-row">
+                                <label>Source IP</label>
+                                <span id="detail-src-ip">-</span>
+                            </div>
+                            <div class="info-row">
+                                <label>Dest IP</label>
+                                <span id="detail-dst-ip">-</span>
+                            </div>
+                            <div class="info-row">
+                                <label>Protocol</label>
+                                <span id="detail-protocol">-</span>
+                            </div>
+                        </div>
+                        <div class="hex-view" id="hex-view"></div>
+                    </div>
+
+                    <div class="detail-section" id="tsn-detail" style="display:none;">
+                        <h4>TSN Info</h4>
+                        <div class="tsn-info">
+                            <div class="info-row">
+                                <label>Stream ID</label>
+                                <span id="tsn-stream-id">-</span>
+                            </div>
+                            <div class="info-row">
+                                <label>Type</label>
+                                <span id="tsn-type">-</span>
+                            </div>
+                            <div class="info-row">
+                                <label>Traffic Class</label>
+                                <span id="tsn-tc">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <span>TSN-Map v1.0.0</span>
+            <span id="connection-status">Disconnected</span>
+        </footer>
+    </div>
+
+    <!-- Modal for interface selection -->
+    <div id="interface-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <h3>Select Interface</h3>
+            <select id="interface-select"></select>
+            <div class="modal-buttons">
+                <button id="btn-interface-ok" class="btn btn-primary">OK</button>
+                <button id="btn-interface-cancel" class="btn btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js" type="module"></script>
+</body>
+</html>
