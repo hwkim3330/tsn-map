@@ -51,6 +51,12 @@ function initializeUI() {
                 updateAllCharts();
             } else if (tab.dataset.tab === 'hosts') {
                 renderHostsList();
+            } else if (tab.dataset.tab === 'detail') {
+                // Show placeholder if no packet selected
+                if (!state.selectedPacket) {
+                    document.getElementById('detail-placeholder').style.display = 'flex';
+                    document.getElementById('detail-content').style.display = 'none';
+                }
             }
         });
     });
@@ -489,13 +495,11 @@ function selectPacket(packet) {
         row.classList.toggle('selected', row.dataset.id == packet.id);
     });
 
-    // Switch to detail tab
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-    document.querySelector('[data-tab="detail"]').classList.add('active');
-    document.getElementById('tab-detail').classList.add('active');
+    // Update footer info immediately
+    document.getElementById('selected-packet-info').textContent =
+        `패킷 #${packet.id} | ${packet.info.protocol || packet.info.ethertype_name} | ${packet.length} bytes`;
 
-    // Show detail content
+    // Prepare detail content (will show when detail tab is clicked)
     document.getElementById('detail-placeholder').style.display = 'none';
     document.getElementById('detail-content').style.display = 'block';
 
@@ -564,10 +568,6 @@ function selectPacket(packet) {
 
     // Hex dump
     renderHexDump(packet.data);
-
-    // Update footer
-    document.getElementById('selected-packet-info').textContent =
-        `패킷 #${packet.id} | ${packet.info.protocol || packet.info.ethertype_name} | ${packet.length} bytes`;
 }
 
 function renderHexDump(data) {

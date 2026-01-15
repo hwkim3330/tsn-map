@@ -315,7 +315,12 @@ body {
 }
 
 .packet-list tr.selected {
-    background: rgba(47,129,247,0.25);
+    background: rgba(47,129,247,0.3) !important;
+    border-left: 3px solid var(--accent-primary);
+}
+
+.packet-list tr.selected td:first-child {
+    padding-left: 9px;
 }
 
 /* Protocol Colors - Wireshark style */
@@ -448,6 +453,7 @@ body {
     border: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
+    overflow: hidden;
 }
 
 .chart-card h4 {
@@ -455,10 +461,23 @@ body {
     color: var(--text-secondary);
     margin-bottom: 12px;
     font-weight: 500;
+    flex-shrink: 0;
 }
 
-.chart-card canvas {
+.chart-wrapper {
+    position: relative;
     flex: 1;
+    min-height: 180px;
+    max-height: 220px;
+    height: 200px;
+}
+
+.chart-wrapper canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100% !important;
+    height: 100% !important;
 }
 
 /* Hosts Tab */
