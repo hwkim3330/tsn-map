@@ -1142,7 +1142,28 @@ function renderTopology() {
     svg = d3.select('#topology-graph')
         .append('svg')
         .attr('width', width)
-        .attr('height', height);
+        .attr('height', height)
+        .attr('viewBox', [0, 0, width, height]);
+
+    // Gradient definitions for links
+    const defs = svg.append('defs');
+
+    // Link gradient
+    const gradient = defs.append('linearGradient')
+        .attr('id', 'link-gradient')
+        .attr('gradientUnits', 'userSpaceOnUse');
+    gradient.append('stop').attr('offset', '0%').attr('stop-color', '#58a6ff');
+    gradient.append('stop').attr('offset', '100%').attr('stop-color', '#a371f7');
+
+    // Glow filter for selected nodes
+    const filter = defs.append('filter')
+        .attr('id', 'glow')
+        .attr('x', '-50%').attr('y', '-50%')
+        .attr('width', '200%').attr('height', '200%');
+    filter.append('feGaussianBlur').attr('stdDeviation', '3').attr('result', 'coloredBlur');
+    const feMerge = filter.append('feMerge');
+    feMerge.append('feMergeNode').attr('in', 'coloredBlur');
+    feMerge.append('feMergeNode').attr('in', 'SourceGraphic');
 
     // Add zoom behavior
     zoom = d3.zoom()
@@ -1154,19 +1175,6 @@ function renderTopology() {
     svg.call(zoom);
 
     const g = svg.append('g');
-
-    // Arrow marker for directed links
-    svg.append('defs').append('marker')
-        .attr('id', 'arrowhead')
-        .attr('viewBox', '-0 -5 10 10')
-        .attr('refX', 20)
-        .attr('refY', 0)
-        .attr('orient', 'auto')
-        .attr('markerWidth', 6)
-        .attr('markerHeight', 6)
-        .append('path')
-        .attr('d', 'M 0,-5 L 10,0 L 0,5')
-        .attr('fill', '#2f81f7');
 
     // Limit nodes to top 50 by traffic for performance
     let allNodes = state.topology.nodes.map(n => ({ ...n }));
@@ -1185,61 +1193,146 @@ function renderTopology() {
             .attr('y', height / 2)
             .attr('text-anchor', 'middle')
             .attr('fill', '#8b949e')
-            .text('Start capture to see network nodes');
+            .attr('font-size', '14px')
+            .text('Start capture to see network topology');
         return;
     }
 
-    // Create simulation
+    // Create simulation with improved forces
     simulation = d3.forceSimulation(nodes)
-        .force('link', d3.forceLink(links).id(d => d.id).distance(120))
-        .force('charge', d3.forceManyBody().strength(-400))
+        .force('link', d3.forceLink(links).id(d => d.id).distance(100).strength(0.5))
+        .force('charge', d3.forceManyBody().strength(-300).distanceMax(300))
         .force('center', d3.forceCenter(width / 2, height / 2))
-        .force('collision', d3.forceCollide().radius(40));
+        .force('collision', d3.forceCollide().radius(d => getNodeRadius(d) + 10))
+        .force('x', d3.forceX(width / 2).strength(0.05))
+        .force('y', d3.forceY(height / 2).strength(0.05));
 
-    // Draw links
+    // Draw links with animated thickness based on traffic
     const link = g.append('g')
+        .attr('class', 'links')
         .selectAll('line')
         .data(links)
         .join('line')
-        .attr('class', 'topology-link')
         .attr('stroke', '#58a6ff')
-        .attr('stroke-opacity', 0.6)
-        .attr('stroke-width', d => Math.min(Math.log(d.packets + 1) * 0.5 + 1, 4));
+        .attr('stroke-opacity', 0.4)
+        .attr('stroke-width', d => Math.min(Math.log(d.packets + 1) * 0.8 + 1, 6))
+        .attr('stroke-linecap', 'round');
 
     // Draw nodes
     const node = g.append('g')
+        .attr('class', 'nodes')
         .selectAll('g')
         .data(nodes)
         .join('g')
         .attr('class', 'topology-node')
+        .style('cursor', 'pointer')
         .call(d3.drag()
             .on('start', dragstarted)
             .on('drag', dragged)
             .on('end', dragended));
 
-    // Node circle
+    // Node outer glow (for hover effect)
     node.append('circle')
+        .attr('class', 'node-glow')
+        .attr('r', d => getNodeRadius(d) + 4)
+        .attr('fill', 'none')
+        .attr('stroke', d => getNodeColor(d))
+        .attr('stroke-width', 0)
+        .attr('stroke-opacity', 0.5);
+
+    // Node circle with gradient
+    node.append('circle')
+        .attr('class', 'node-circle')
         .attr('r', d => getNodeRadius(d))
         .attr('fill', d => getNodeColor(d))
-        .attr('stroke', '#30363d')
+        .attr('stroke', '#1c1c1e')
         .attr('stroke-width', 2);
 
-    // Labels - show IP or MAC only (no hostname/domain)
+    // Node icon (simple text for device type)
+    node.append('text')
+        .attr('class', 'node-icon')
+        .attr('text-anchor', 'middle')
+        .attr('dy', '0.35em')
+        .attr('fill', '#fff')
+        .attr('font-size', d => Math.max(getNodeRadius(d) * 0.8, 10) + 'px')
+        .attr('font-weight', 'bold')
+        .text(d => getNodeIcon(d));
+
+    // Labels - show IP or MAC only
     if (document.getElementById('show-labels').checked) {
         node.append('text')
-            .attr('dx', d => getNodeRadius(d) + 5)
+            .attr('class', 'node-label')
+            .attr('dx', d => getNodeRadius(d) + 6)
             .attr('dy', 4)
             .attr('fill', '#c9d1d9')
             .attr('font-size', '11px')
+            .attr('font-family', 'SF Mono, Menlo, monospace')
             .text(d => d.ip_addresses?.[0] || d.mac_address?.substring(0, 8) || d.id.substring(0, 8));
     }
 
-    // Tooltip
-    node.append('title')
-        .text(d => {
-            const ips = d.ip_addresses?.join(', ') || 'Unknown';
-            return `IP: ${ips}\nMAC: ${d.mac_address || 'Unknown'}\nType: ${d.node_type || 'Unknown'}\nVendor: ${d.vendor || 'Unknown'}`;
-        });
+    // Hover effects
+    node.on('mouseenter', function(event, d) {
+        // Highlight node
+        d3.select(this).select('.node-glow')
+            .transition().duration(200)
+            .attr('stroke-width', 8);
+
+        d3.select(this).select('.node-circle')
+            .transition().duration(200)
+            .attr('r', getNodeRadius(d) + 3);
+
+        // Highlight connected links
+        link.transition().duration(200)
+            .attr('stroke-opacity', l =>
+                (l.source.id === d.id || l.target.id === d.id) ? 0.9 : 0.1)
+            .attr('stroke-width', l =>
+                (l.source.id === d.id || l.target.id === d.id)
+                    ? Math.min(Math.log(l.packets + 1) * 0.8 + 2, 8)
+                    : Math.min(Math.log(l.packets + 1) * 0.5, 3));
+
+        // Dim other nodes
+        node.transition().duration(200)
+            .style('opacity', n =>
+                (n.id === d.id || links.some(l =>
+                    (l.source.id === d.id && l.target.id === n.id) ||
+                    (l.target.id === d.id && l.source.id === n.id)
+                )) ? 1 : 0.3);
+
+        // Show tooltip
+        showTopologyTooltip(event, d);
+    });
+
+    node.on('mouseleave', function(event, d) {
+        // Reset node
+        d3.select(this).select('.node-glow')
+            .transition().duration(200)
+            .attr('stroke-width', 0);
+
+        d3.select(this).select('.node-circle')
+            .transition().duration(200)
+            .attr('r', getNodeRadius(d));
+
+        // Reset links
+        link.transition().duration(200)
+            .attr('stroke-opacity', 0.4)
+            .attr('stroke-width', l => Math.min(Math.log(l.packets + 1) * 0.8 + 1, 6));
+
+        // Reset nodes
+        node.transition().duration(200)
+            .style('opacity', 1);
+
+        hideTopologyTooltip();
+    });
+
+    // Click to select and filter
+    node.on('click', function(event, d) {
+        event.stopPropagation();
+        const ip = d.ip_addresses?.[0];
+        if (ip) {
+            filterByHost(ip);
+            showNotification(`Filtering by ${ip}`, 'info');
+        }
+    });
 
     simulation.on('tick', () => {
         link
@@ -1250,6 +1343,9 @@ function renderTopology() {
 
         node.attr('transform', d => `translate(${d.x},${d.y})`);
     });
+
+    // Gentle animation
+    simulation.alpha(0.5).restart();
 
     function dragstarted(event) {
         if (!event.active) simulation.alphaTarget(0.3).restart();
@@ -1266,6 +1362,55 @@ function renderTopology() {
         if (!event.active) simulation.alphaTarget(0);
         event.subject.fx = null;
         event.subject.fy = null;
+    }
+}
+
+// Get node icon based on type
+function getNodeIcon(node) {
+    const type = node.node_type || 'Unknown';
+    const icons = {
+        'Router': 'R',
+        'Gateway': 'G',
+        'Switch': 'S',
+        'Bridge': 'B',
+        'AccessPoint': 'W',
+        'Host': 'H',
+        'EndStation': 'E',
+        'Server': '▣',
+        'Unknown': '?',
+    };
+    return icons[type] || '?';
+}
+
+// Topology tooltip
+let tooltipEl = null;
+
+function showTopologyTooltip(event, d) {
+    if (!tooltipEl) {
+        tooltipEl = document.createElement('div');
+        tooltipEl.className = 'topology-tooltip';
+        document.body.appendChild(tooltipEl);
+    }
+
+    const ips = d.ip_addresses?.join(', ') || 'Unknown';
+    const packets = (d.packets_sent || 0) + (d.packets_received || 0);
+
+    tooltipEl.innerHTML = `
+        <div class="tooltip-header">${d.node_type || 'Unknown Device'}</div>
+        <div class="tooltip-row"><span>IP:</span> <span>${ips}</span></div>
+        <div class="tooltip-row"><span>MAC:</span> <span>${d.mac_address || 'Unknown'}</span></div>
+        <div class="tooltip-row"><span>Vendor:</span> <span>${d.vendor || 'Unknown'}</span></div>
+        <div class="tooltip-row"><span>Packets:</span> <span>${packets.toLocaleString()}</span></div>
+    `;
+
+    tooltipEl.style.display = 'block';
+    tooltipEl.style.left = (event.pageX + 15) + 'px';
+    tooltipEl.style.top = (event.pageY - 10) + 'px';
+}
+
+function hideTopologyTooltip() {
+    if (tooltipEl) {
+        tooltipEl.style.display = 'none';
     }
 }
 
