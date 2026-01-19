@@ -1492,7 +1492,7 @@ async function savePcap() {
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            showNotification(`${state.packets.length}packets saved`, 'success');
+            showNotification(`${state.packets.length} packets saved`, 'success');
         } else {
             showNotification('PCAP save failed', 'error');
         }
@@ -1526,7 +1526,7 @@ async function handlePcapFileSelect(event) {
                 clearAll();
                 document.getElementById('capture-file').textContent = file.name;
                 await loadPackets();
-                showNotification(`${result.data.packets_loaded}packets loaded`, 'success');
+                showNotification(`${result.data.packets_loaded} packets loaded`, 'success');
             }
         } else {
             showNotification('PCAP load failed', 'error');
