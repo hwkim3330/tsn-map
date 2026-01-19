@@ -20,6 +20,28 @@ if [ "$EUID" -ne 0 ]; then
     echo -e "${YELLOW}To enable packet capture, run: sudo ./run.sh${NC}"
 fi
 
+# Auto-detect network interface
+detect_interface() {
+    # Try to find a real network interface (not lo, docker, veth, etc.)
+    for iface in $(ls /sys/class/net/ 2>/dev/null); do
+        case "$iface" in
+            lo|docker*|veth*|br-*|virbr*)
+                continue
+                ;;
+            *)
+                if [ -d "/sys/class/net/$iface" ]; then
+                    echo "$iface"
+                    return
+                fi
+                ;;
+        esac
+    done
+    echo "any"  # Fallback to capture all
+}
+
+INTERFACE="${1:-$(detect_interface)}"
+echo -e "${GREEN}Using interface: ${INTERFACE}${NC}"
+
 # Build backend if needed
 if [ ! -f target/release/tsn-map ] || [ Cargo.toml -nt target/release/tsn-map ]; then
     echo -e "${YELLOW}Building backend...${NC}"
@@ -36,7 +58,7 @@ fi
 
 # Start backend server in background
 echo -e "${GREEN}Starting backend server on port 8080...${NC}"
-./target/release/tsn-map -p 8080 &
+./target/release/tsn-map -i "$INTERFACE" -p 8080 &
 BACKEND_PID=$!
 
 # Wait for server to start
