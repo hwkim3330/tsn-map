@@ -114,12 +114,9 @@ function setupEventListeners() {
     });
 
     // Topology controls
-    document.getElementById('btn-layout-force').addEventListener('click', () => setLayout('force'));
-    document.getElementById('btn-layout-radial').addEventListener('click', () => setLayout('radial'));
     document.getElementById('btn-zoom-in').addEventListener('click', () => zoomTopology(1.2));
     document.getElementById('btn-zoom-out').addEventListener('click', () => zoomTopology(0.8));
     document.getElementById('btn-zoom-fit').addEventListener('click', fitTopology);
-    document.getElementById('btn-scan-network')?.addEventListener('click', scanNetwork);
     document.getElementById('show-labels').addEventListener('change', renderTopology);
     document.getElementById('auto-refresh').addEventListener('change', (e) => {
         state.autoRefresh = e.target.checked;

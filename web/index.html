@@ -127,14 +127,15 @@
                 <!-- Network Topology Tab -->
                 <div class="tab-content active" id="tab-topology">
                     <div class="topology-toolbar">
-                        <button id="btn-layout-force" class="btn btn-small active">Force</button>
-                        <button id="btn-layout-radial" class="btn btn-small">Radial</button>
-                        <button id="btn-zoom-in" class="btn btn-small">+</button>
-                        <button id="btn-zoom-out" class="btn btn-small">-</button>
-                        <button id="btn-zoom-fit" class="btn btn-small">Fit</button>
-                        <button id="btn-scan-network" class="btn btn-small btn-primary">Scan Network</button>
-                        <label class="toggle"><input type="checkbox" id="show-labels" checked> Labels</label>
-                        <label class="toggle"><input type="checkbox" id="auto-refresh" checked> Auto</label>
+                        <div class="toolbar-group">
+                            <button id="btn-zoom-in" class="btn btn-small" title="Zoom In">+</button>
+                            <button id="btn-zoom-out" class="btn btn-small" title="Zoom Out">−</button>
+                            <button id="btn-zoom-fit" class="btn btn-small" title="Fit to View">Fit</button>
+                        </div>
+                        <div class="toolbar-group">
+                            <label class="toggle"><input type="checkbox" id="show-labels" checked> Labels</label>
+                            <label class="toggle"><input type="checkbox" id="auto-refresh" checked> Auto Refresh</label>
+                        </div>
                     </div>
                     <div class="topology-container">
                         <div id="topology-graph"></div>
