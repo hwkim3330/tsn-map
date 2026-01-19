@@ -383,14 +383,13 @@ function flushPendingPackets() {
     updateCounters();
 }
 
-function createPacketRow(packet, prevPacket = null) {
+function createPacketRow(packet) {
     const row = document.createElement('tr');
     row.className = getProtocolClass(packet);
     row.dataset.id = packet.id;
     row.onclick = () => selectPacket(packet);
 
     const time = formatTime(packet.timestamp);
-    const delta = calculateDelta(packet, prevPacket);
     const info = getPacketInfo(packet);
     const srcAddr = shortenAddress(packet.info.src_ip || packet.info.src_mac);
     const dstAddr = shortenAddress(packet.info.dst_ip || packet.info.dst_mac);
@@ -398,7 +397,6 @@ function createPacketRow(packet, prevPacket = null) {
     row.innerHTML = `
         <td>${packet.id}</td>
         <td>${time}</td>
-        <td class="delta-cell">${delta}</td>
         <td title="${packet.info.src_ip || packet.info.src_mac || ''}">${srcAddr}</td>
         <td title="${packet.info.dst_ip || packet.info.dst_mac || ''}">${dstAddr}</td>
         <td><span class="proto-badge proto-${(packet.info.protocol || packet.info.ethertype_name || '').toLowerCase()}">${packet.info.protocol || packet.info.ethertype_name || '-'}</span></td>
@@ -407,20 +405,6 @@ function createPacketRow(packet, prevPacket = null) {
     `;
 
     return row;
-}
-
-// Calculate delta time between packets
-function calculateDelta(packet, prevPacket) {
-    if (!prevPacket) return '0.000000';
-
-    const currTime = new Date(packet.timestamp).getTime();
-    const prevTime = new Date(prevPacket.timestamp).getTime();
-    const deltaMs = currTime - prevTime;
-
-    if (deltaMs < 0) return '0.000000';
-    if (deltaMs < 1000) return (deltaMs / 1000).toFixed(6);
-    if (deltaMs < 60000) return (deltaMs / 1000).toFixed(3);
-    return (deltaMs / 1000).toFixed(1);
 }
 
 // Shorten IPv6 and long addresses for display
@@ -532,11 +516,8 @@ function renderPacketList() {
 
     // Use document fragment for batch DOM update
     const fragment = document.createDocumentFragment();
-    displayPackets.forEach((packet, index) => {
-        // Get previous packet for delta calculation
-        const globalIndex = startIdx + index;
-        const prevPacket = globalIndex > 0 ? state.filteredPackets[globalIndex - 1] : null;
-        const row = createPacketRow(packet, prevPacket);
+    displayPackets.forEach(packet => {
+        const row = createPacketRow(packet);
         fragment.appendChild(row);
     });
     tbody.appendChild(fragment);
@@ -569,9 +550,7 @@ function updatePaginationUI() {
 // appendPacketRow - now uses createPacketRow for consistency
 function appendPacketRow(packet, live = false) {
     const tbody = document.getElementById('packet-tbody');
-    // Get previous packet for delta calculation
-    const prevPacket = state.packets.length > 1 ? state.packets[state.packets.length - 2] : null;
-    const row = createPacketRow(packet, prevPacket);
+    const row = createPacketRow(packet);
     tbody.appendChild(row);
 
     // Auto-scroll only for live packets on last page
@@ -2159,19 +2138,89 @@ function initializeTestCharts() {
 let ioGraphRefreshTimer = null;
 
 async function fetchIoGraphData() {
-    const intervalMs = document.getElementById('iograph-interval')?.value || 100;
+    const intervalMs = parseInt(document.getElementById('iograph-interval')?.value) || 100;
     const yAxis = document.getElementById('iograph-yaxis')?.value || 'packets';
 
-    try {
-        const response = await fetch(`${API_BASE}/api/iograph?interval_ms=${intervalMs}`);
-        const result = await response.json();
+    // Use filtered packets from current state (respects filter)
+    const packets = state.filteredPackets.length > 0 ? state.filteredPackets : state.packets;
 
-        if (result.success && result.data) {
-            updateIoGraphDisplay(result.data, yAxis);
-        }
-    } catch (error) {
-        console.error('Failed to fetch IO graph data:', error);
+    if (packets.length === 0) {
+        updateIoGraphDisplay({
+            buckets: [],
+            total_packets: 0,
+            total_bytes: 0,
+            duration_ms: 0,
+            avg_pps: 0,
+            peak_pps: 0,
+            protocols: []
+        }, yAxis);
+        return;
     }
+
+    // Calculate IO Graph locally from filtered packets
+    const data = calculateIoGraphData(packets, intervalMs);
+    updateIoGraphDisplay(data, yAxis);
+}
+
+function calculateIoGraphData(packets, intervalMs) {
+    if (packets.length === 0) {
+        return { buckets: [], total_packets: 0, total_bytes: 0, duration_ms: 0, avg_pps: 0, peak_pps: 0, protocols: [] };
+    }
+
+    const startTime = new Date(packets[0].timestamp).getTime();
+    const endTime = new Date(packets[packets.length - 1].timestamp).getTime();
+    const durationMs = Math.max(1, endTime - startTime);
+
+    const numBuckets = Math.ceil(durationMs / intervalMs) + 1;
+    const bucketPackets = new Array(numBuckets).fill(0);
+    const bucketBytes = new Array(numBuckets).fill(0);
+    const protocolMap = new Map();
+
+    let totalPackets = 0;
+    let totalBytes = 0;
+
+    packets.forEach(pkt => {
+        const pktTime = new Date(pkt.timestamp).getTime();
+        const offsetMs = Math.max(0, pktTime - startTime);
+        const bucketIdx = Math.floor(offsetMs / intervalMs);
+
+        if (bucketIdx < numBuckets) {
+            bucketPackets[bucketIdx]++;
+            bucketBytes[bucketIdx] += pkt.length;
+        }
+
+        totalPackets++;
+        totalBytes += pkt.length;
+
+        const proto = pkt.info.protocol || pkt.info.ethertype_name || 'Unknown';
+        const entry = protocolMap.get(proto) || { count: 0, bytes: 0 };
+        entry.count++;
+        entry.bytes += pkt.length;
+        protocolMap.set(proto, entry);
+    });
+
+    const buckets = bucketPackets.map((packets, i) => ({
+        time_ms: i * intervalMs,
+        packets,
+        bytes: bucketBytes[i]
+    }));
+
+    const peakPps = Math.max(...bucketPackets) * (1000 / intervalMs);
+    const avgPps = totalPackets / (durationMs / 1000);
+
+    const protocols = Array.from(protocolMap.entries())
+        .map(([protocol, data]) => ({ protocol, count: data.count, bytes: data.bytes }))
+        .sort((a, b) => b.count - a.count);
+
+    return {
+        buckets,
+        total_packets: totalPackets,
+        total_bytes: totalBytes,
+        duration_ms: durationMs,
+        avg_pps: avgPps,
+        peak_pps: peakPps,
+        protocols
+    };
 }
 
 function updateIoGraphDisplay(data, yAxis) {

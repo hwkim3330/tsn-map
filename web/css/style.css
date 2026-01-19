@@ -485,13 +485,6 @@ body {
 .packet-list tr.proto-security .proto-badge { color: var(--accent-red); }
 .packet-list tr.proto-tls .proto-badge { color: var(--accent-cyan); }
 
-/* Delta time cell */
-.delta-cell {
-    font-family: 'SF Mono', Menlo, monospace;
-    font-size: 0.8em;
-    color: var(--text-secondary);
-}
-
 /* Tabs */
 .tabs {
     display: flex;
