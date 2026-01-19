@@ -334,21 +334,21 @@ body {
     text-overflow: ellipsis;
 }
 
-/* Column widths - default values, user can resize */
+/* Column widths - optimized for IPv4 addresses */
 .packet-list th:nth-child(1),
-.packet-list td:nth-child(1) { width: 50px; min-width: 35px; }  /* No. */
+.packet-list td:nth-child(1) { width: 50px; min-width: 40px; }   /* No. */
 .packet-list th:nth-child(2),
-.packet-list td:nth-child(2) { width: 75px; min-width: 45px; }  /* Time */
+.packet-list td:nth-child(2) { width: 70px; min-width: 50px; }   /* Time */
 .packet-list th:nth-child(3),
-.packet-list td:nth-child(3) { width: 130px; min-width: 60px; } /* Source */
+.packet-list td:nth-child(3) { width: 120px; min-width: 90px; }  /* Source - fits 192.168.100.123 */
 .packet-list th:nth-child(4),
-.packet-list td:nth-child(4) { width: 130px; min-width: 60px; } /* Destination */
+.packet-list td:nth-child(4) { width: 120px; min-width: 90px; }  /* Destination */
 .packet-list th:nth-child(5),
-.packet-list td:nth-child(5) { width: 70px; min-width: 40px; }  /* Protocol */
+.packet-list td:nth-child(5) { width: 65px; min-width: 50px; }   /* Protocol */
 .packet-list th:nth-child(6),
-.packet-list td:nth-child(6) { width: 50px; min-width: 35px; }  /* Length */
+.packet-list td:nth-child(6) { width: 50px; min-width: 40px; }   /* Length */
 .packet-list th:nth-child(7),
-.packet-list td:nth-child(7) { min-width: 80px; }               /* Info */
+.packet-list td:nth-child(7) { min-width: 100px; }               /* Info */
 
 .packet-list tr {
     cursor: pointer;
@@ -1265,6 +1265,18 @@ body {
     border-top-color: #fff;
     border-radius: 50%;
     animation: spin 0.6s linear infinite;
+}
+
+.btn-spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    vertical-align: middle;
+    margin-right: 6px;
 }
 
 /* Keyboard shortcuts hint */

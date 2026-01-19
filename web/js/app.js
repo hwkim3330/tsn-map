@@ -365,19 +365,47 @@ function createPacketRow(packet) {
 function shortenAddress(addr) {
     if (!addr) return '-';
 
-    // IPv6: shorten middle part
-    if (addr.includes(':') && addr.length > 20) {
-        const parts = addr.split(':');
-        if (parts.length > 4) {
-            return parts.slice(0, 2).join(':') + '::' + parts.slice(-2).join(':');
+    // Check if IPv6 (contains multiple colons and is long)
+    const colonCount = (addr.match(/:/g) || []).length;
+
+    // IPv6: compress for display
+    if (colonCount >= 4 && addr.length > 15) {
+        // Already compressed
+        if (addr.includes('::')) {
+            // Still too long, show prefix::suffix
+            if (addr.length > 25) {
+                const parts = addr.split('::');
+                return parts[0].substring(0, 8) + '::' + (parts[1] || '').slice(-8);
+            }
+            return addr;
         }
+        // Full IPv6, compress middle zeros
+        const parts = addr.split(':');
+        if (parts.length === 8) {
+            // Find longest run of zeros to compress
+            let start = -1, len = 0, maxStart = -1, maxLen = 0;
+            for (let i = 0; i < parts.length; i++) {
+                if (parts[i] === '0' || parts[i] === '0000') {
+                    if (start === -1) start = i;
+                    len++;
+                } else {
+                    if (len > maxLen) { maxStart = start; maxLen = len; }
+                    start = -1; len = 0;
+                }
+            }
+            if (len > maxLen) { maxStart = start; maxLen = len; }
+
+            if (maxLen >= 2) {
+                const before = parts.slice(0, maxStart).join(':');
+                const after = parts.slice(maxStart + maxLen).join(':');
+                return (before || '') + '::' + (after || '');
+            }
+        }
+        // Fallback: show first and last parts
+        return parts.slice(0, 2).join(':') + '::' + parts.slice(-1)[0];
     }
 
-    // MAC: show first 8 chars
-    if (addr.length === 17 && addr.includes(':')) {
-        return addr.substring(0, 8) + '...';
-    }
-
+    // MAC address: keep as is (it's useful to see)
     return addr;
 }
 
@@ -855,8 +883,8 @@ function initializeCharts() {
                 legend: {
                     position: 'right',
                     labels: {
-                        color: '#e6edf3',
-                        font: { size: 10 },
+                        color: '#f5f5f7',
+                        font: { size: 11 },
                         boxWidth: 12,
                         padding: 8,
                         generateLabels: function(chart) {
@@ -865,6 +893,7 @@ function initializeCharts() {
                                 return data.labels.map((label, i) => ({
                                     text: label.length > 12 ? label.substring(0, 12) + '...' : label,
                                     fillStyle: data.datasets[0].backgroundColor[i],
+                                    fontColor: '#f5f5f7',
                                     hidden: false,
                                     index: i
                                 }));
@@ -1890,12 +1919,15 @@ async function startPingTest() {
         return;
     }
 
-    const resultsEl = document.getElementById('ping-results');
-    resultsEl.innerHTML = '<div class="result-line">Starting ping test to ' + target + '...</div>';
-
     const btn = document.getElementById('btn-ping-start');
     btn.disabled = true;
-    btn.textContent = 'Running...';
+    btn.innerHTML = '<span class="btn-spinner"></span> Testing...';
+
+    // Reset stats
+    document.getElementById('ping-min').textContent = '...';
+    document.getElementById('ping-avg').textContent = '...';
+    document.getElementById('ping-max').textContent = '...';
+    document.getElementById('ping-loss').textContent = '...';
 
     try {
         const result = await apiCall('/api/test/ping', 'POST', {
@@ -1907,14 +1939,23 @@ async function startPingTest() {
         if (result && result.success) {
             renderPingResults(result.data);
         } else {
-            resultsEl.innerHTML = `<div class="result-line result-error">Error: ${result?.error || 'Unknown error'}</div>`;
+            showNotification(`Error: ${result?.error || 'Unknown error'}`, 'error');
+            resetPingStats();
         }
     } catch (e) {
-        resultsEl.innerHTML = `<div class="result-line result-error">Error: ${e.message}</div>`;
+        showNotification(`Error: ${e.message}`, 'error');
+        resetPingStats();
     }
 
     btn.disabled = false;
-    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Start Ping';
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Start Ping Test';
+}
+
+function resetPingStats() {
+    document.getElementById('ping-min').textContent = '-';
+    document.getElementById('ping-avg').textContent = '-';
+    document.getElementById('ping-max').textContent = '-';
+    document.getElementById('ping-loss').textContent = '-';
 }
 
 function renderPingResults(data) {
@@ -1957,12 +1998,15 @@ async function startThroughputTest() {
         return;
     }
 
-    const resultsEl = document.getElementById('throughput-results');
-    resultsEl.innerHTML = `<div class="result-line">Starting ${mode} mode (${protocol.toUpperCase()})...</div>`;
-
     const btn = document.getElementById('btn-throughput-start');
     btn.disabled = true;
-    btn.textContent = 'Running...';
+    btn.innerHTML = '<span class="btn-spinner"></span> Testing...';
+
+    // Reset stats
+    document.getElementById('tp-bandwidth').textContent = '...';
+    document.getElementById('tp-packets').textContent = '...';
+    document.getElementById('tp-jitter').textContent = '...';
+    document.getElementById('tp-loss').textContent = '...';
 
     try {
         const result = await apiCall('/api/test/throughput', 'POST', {
@@ -1976,14 +2020,23 @@ async function startThroughputTest() {
         if (result && result.success) {
             renderThroughputResults(result.data);
         } else {
-            resultsEl.innerHTML = `<div class="result-line result-error">Error: ${result?.error || 'Unknown error'}</div>`;
+            showNotification(`Error: ${result?.error || 'Unknown error'}`, 'error');
+            resetThroughputStats();
         }
     } catch (e) {
-        resultsEl.innerHTML = `<div class="result-line result-error">Error: ${e.message}</div>`;
+        showNotification(`Error: ${e.message}`, 'error');
+        resetThroughputStats();
     }
 
     btn.disabled = false;
-    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Start Test';
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Start Throughput Test';
+}
+
+function resetThroughputStats() {
+    document.getElementById('tp-bandwidth').textContent = '-';
+    document.getElementById('tp-packets').textContent = '-';
+    document.getElementById('tp-jitter').textContent = '-';
+    document.getElementById('tp-loss').textContent = '-';
 }
 
 function renderThroughputResults(data) {
