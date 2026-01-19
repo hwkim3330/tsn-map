@@ -307,7 +307,7 @@ body {
     border-collapse: collapse;
     font-size: 0.82em;
     font-family: 'SF Mono', Menlo, monospace;
-    table-layout: fixed;
+    table-layout: auto;
 }
 
 .packet-list th {
@@ -333,21 +333,21 @@ body {
     text-overflow: ellipsis;
 }
 
-/* Column widths - optimized for readability */
+/* Column widths - default values, user can resize */
 .packet-list th:nth-child(1),
-.packet-list td:nth-child(1) { width: 55px; max-width: 55px; }  /* No. */
+.packet-list td:nth-child(1) { width: 55px; min-width: 40px; }  /* No. */
 .packet-list th:nth-child(2),
-.packet-list td:nth-child(2) { width: 85px; max-width: 85px; }  /* Time */
+.packet-list td:nth-child(2) { width: 85px; min-width: 60px; }  /* Time */
 .packet-list th:nth-child(3),
-.packet-list td:nth-child(3) { width: 140px; max-width: 140px; } /* Source */
+.packet-list td:nth-child(3) { width: 140px; min-width: 80px; } /* Source */
 .packet-list th:nth-child(4),
-.packet-list td:nth-child(4) { width: 140px; max-width: 140px; } /* Destination */
+.packet-list td:nth-child(4) { width: 140px; min-width: 80px; } /* Destination */
 .packet-list th:nth-child(5),
-.packet-list td:nth-child(5) { width: 75px; max-width: 75px; }  /* Protocol */
+.packet-list td:nth-child(5) { width: 75px; min-width: 50px; }  /* Protocol */
 .packet-list th:nth-child(6),
-.packet-list td:nth-child(6) { width: 55px; max-width: 55px; }  /* Length */
+.packet-list td:nth-child(6) { width: 55px; min-width: 40px; }  /* Length */
 .packet-list th:nth-child(7),
-.packet-list td:nth-child(7) { min-width: 150px; }              /* Info */
+.packet-list td:nth-child(7) { min-width: 100px; }              /* Info */
 
 .packet-list tr {
     cursor: pointer;
