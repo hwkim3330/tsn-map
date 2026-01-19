@@ -336,19 +336,19 @@ body {
 
 /* Column widths - default values, user can resize */
 .packet-list th:nth-child(1),
-.packet-list td:nth-child(1) { width: 55px; min-width: 40px; }  /* No. */
+.packet-list td:nth-child(1) { width: 50px; min-width: 35px; }  /* No. */
 .packet-list th:nth-child(2),
-.packet-list td:nth-child(2) { width: 85px; min-width: 60px; }  /* Time */
+.packet-list td:nth-child(2) { width: 75px; min-width: 45px; }  /* Time */
 .packet-list th:nth-child(3),
-.packet-list td:nth-child(3) { width: 140px; min-width: 80px; } /* Source */
+.packet-list td:nth-child(3) { width: 130px; min-width: 60px; } /* Source */
 .packet-list th:nth-child(4),
-.packet-list td:nth-child(4) { width: 140px; min-width: 80px; } /* Destination */
+.packet-list td:nth-child(4) { width: 130px; min-width: 60px; } /* Destination */
 .packet-list th:nth-child(5),
-.packet-list td:nth-child(5) { width: 75px; min-width: 50px; }  /* Protocol */
+.packet-list td:nth-child(5) { width: 70px; min-width: 40px; }  /* Protocol */
 .packet-list th:nth-child(6),
-.packet-list td:nth-child(6) { width: 55px; min-width: 40px; }  /* Length */
+.packet-list td:nth-child(6) { width: 50px; min-width: 35px; }  /* Length */
 .packet-list th:nth-child(7),
-.packet-list td:nth-child(7) { min-width: 100px; }              /* Info */
+.packet-list td:nth-child(7) { min-width: 80px; }               /* Info */
 
 .packet-list tr {
     cursor: pointer;
@@ -642,12 +642,11 @@ body {
 }
 
 .chart-card h4 {
-    font-size: 0.85em;
-    color: var(--text-secondary);
+    font-size: 0.9em;
+    color: var(--text-primary);
     margin-bottom: 16px;
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.01em;
     flex-shrink: 0;
 }
 

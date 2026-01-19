@@ -345,18 +345,40 @@ function createPacketRow(packet) {
 
     const time = formatTime(packet.timestamp);
     const info = getPacketInfo(packet);
+    const srcAddr = shortenAddress(packet.info.src_ip || packet.info.src_mac);
+    const dstAddr = shortenAddress(packet.info.dst_ip || packet.info.dst_mac);
 
     row.innerHTML = `
         <td>${packet.id}</td>
         <td>${time}</td>
-        <td>${packet.info.src_ip || packet.info.src_mac}</td>
-        <td>${packet.info.dst_ip || packet.info.dst_mac}</td>
+        <td title="${packet.info.src_ip || packet.info.src_mac || ''}">${srcAddr}</td>
+        <td title="${packet.info.dst_ip || packet.info.dst_mac || ''}">${dstAddr}</td>
         <td><span class="proto-badge proto-${(packet.info.protocol || packet.info.ethertype_name || '').toLowerCase()}">${packet.info.protocol || packet.info.ethertype_name || '-'}</span></td>
         <td>${packet.length}</td>
         <td class="info-cell">${info}</td>
     `;
 
     return row;
+}
+
+// Shorten IPv6 and long addresses for display
+function shortenAddress(addr) {
+    if (!addr) return '-';
+
+    // IPv6: shorten middle part
+    if (addr.includes(':') && addr.length > 20) {
+        const parts = addr.split(':');
+        if (parts.length > 4) {
+            return parts.slice(0, 2).join(':') + '::' + parts.slice(-2).join(':');
+        }
+    }
+
+    // MAC: show first 8 chars
+    if (addr.length === 17 && addr.includes(':')) {
+        return addr.substring(0, 8) + '...';
+    }
+
+    return addr;
 }
 
 function updateHostInfo(packet) {
@@ -698,9 +720,12 @@ function selectPacket(packet) {
 
     // Update footer info immediately
     document.getElementById('selected-packet-info').textContent =
-        `packets #${packet.id} | ${packet.info.protocol || packet.info.ethertype_name} | ${packet.length} bytes`;
+        `#${packet.id} | ${packet.info.protocol || packet.info.ethertype_name} | ${packet.length} bytes`;
 
-    // Prepare detail content (will show when detail tab is clicked)
+    // Auto-switch to Detail tab
+    switchTab('detail');
+
+    // Show detail content
     document.getElementById('detail-placeholder').style.display = 'none';
     document.getElementById('detail-content').style.display = 'block';
 
