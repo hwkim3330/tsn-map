@@ -254,10 +254,17 @@
                                         <input type="number" id="ping-interval" value="1000" min="100" max="10000">
                                     </div>
                                 </div>
-                                <button id="btn-ping-start" class="btn btn-primary btn-full">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-                                    Start Ping Test
-                                </button>
+                                <div class="btn-group">
+                                    <button id="btn-ping-start" class="btn btn-primary">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                                        ICMP Ping
+                                    </button>
+                                    <button id="btn-hwping-start" class="btn btn-secondary" title="Hardware-timestamped UDP ping (more precise)">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                        HW Ping
+                                    </button>
+                                </div>
+                                <div id="hwts-status" class="hwts-status">Checking HW timestamp support...</div>
                             </div>
                             <div class="test-stats" id="ping-stats">
                                 <div class="stat-box">

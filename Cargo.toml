@@ -46,6 +46,10 @@ uuid = { version = "1", features = ["v4", "serde"] }
 # Raw socket for ICMP ping
 socket2 = { version = "0.5", features = ["all"] }
 
+# Low-level system calls for SO_TIMESTAMPING
+libc = "0.2"
+nix = { version = "0.29", features = ["net", "socket"] }
+
 # Network packet construction and parsing
 pnet = "0.35"
 pnet_datalink = "0.35"

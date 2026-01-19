@@ -194,6 +194,43 @@ body {
     color: var(--text-primary);
 }
 
+/* Button Group */
+.btn-group {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.btn-group .btn {
+    flex: 1;
+}
+
+/* HW Timestamp Status */
+.hwts-status {
+    font-size: 0.75em;
+    padding: 6px 10px;
+    border-radius: 6px;
+    text-align: center;
+    margin-top: 8px;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+}
+
+.hwts-status.supported {
+    background: rgba(48, 209, 88, 0.15);
+    color: var(--accent-green);
+}
+
+.hwts-status.sw-only {
+    background: rgba(255, 159, 10, 0.15);
+    color: var(--accent-orange);
+}
+
+.hwts-status.unsupported {
+    background: rgba(255, 69, 58, 0.15);
+    color: var(--accent-red);
+}
+
 /* Dropdown */
 .dropdown {
     position: relative;

@@ -2249,3 +2249,176 @@ async function applyTasConfig() {
         showNotification('Failed to apply TAS: ' + e.message, 'error');
     }
 }
+
+// ============================================
+// Hardware Timestamp Ping Test
+// ============================================
+
+// Check HW timestamp capability
+async function checkTimestampCapability() {
+    const result = await apiCall('/api/timestamp/capability');
+    if (result && result.success) {
+        const cap = result.data;
+        const status = document.getElementById('hwts-status');
+        if (status) {
+            if (cap.hw_tx_supported && cap.hw_rx_supported) {
+                status.textContent = 'HW timestamps supported';
+                status.className = 'hwts-status supported';
+            } else if (cap.sw_tx_supported && cap.sw_rx_supported) {
+                status.textContent = 'SW timestamps only';
+                status.className = 'hwts-status sw-only';
+            } else {
+                status.textContent = 'Timestamps not supported';
+                status.className = 'hwts-status unsupported';
+            }
+        }
+        return cap;
+    }
+    return null;
+}
+
+// Hardware-timestamped ping test
+async function startHwPingTest() {
+    const target = document.getElementById('ping-target').value.trim();
+    const count = parseInt(document.getElementById('ping-count').value) || 10;
+    const interval = parseInt(document.getElementById('ping-interval').value) || 100;
+
+    if (!target) {
+        showNotification('Please enter a target host', 'error');
+        return;
+    }
+
+    const btn = document.getElementById('btn-hwping-start');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="btn-spinner"></span> Testing...';
+    }
+
+    // Reset stats and chart
+    document.getElementById('ping-min').textContent = '...';
+    document.getElementById('ping-avg').textContent = '...';
+    document.getElementById('ping-max').textContent = '...';
+    document.getElementById('ping-loss').textContent = '...';
+
+    // Update unit label to show ns for HW timestamps
+    const unitLabels = document.querySelectorAll('.ping-unit');
+    unitLabels.forEach(el => el.textContent = 'ns');
+
+    // Initialize chart with empty data
+    if (state.charts.latency) {
+        state.charts.latency.data.labels = [];
+        state.charts.latency.data.datasets[0].data = [];
+        state.charts.latency.data.datasets[0].label = 'RTT (ns)';
+        state.charts.latency.update();
+    }
+
+    const pingResults = [];
+
+    try {
+        // Use HW ping SSE endpoint
+        const url = `/api/test/hwping/stream?target=${encodeURIComponent(target)}&count=${count}&interval=${interval}`;
+        const eventSource = new EventSource(url);
+
+        eventSource.addEventListener('info', (e) => {
+            const data = JSON.parse(e.data);
+            const hwStatus = document.getElementById('hwts-status');
+            if (hwStatus) {
+                if (data.hw_timestamps_enabled) {
+                    hwStatus.textContent = 'HW timestamps active';
+                    hwStatus.className = 'hwts-status supported';
+                } else {
+                    hwStatus.textContent = 'Using SW timestamps';
+                    hwStatus.className = 'hwts-status sw-only';
+                }
+            }
+        });
+
+        eventSource.addEventListener('ping', (e) => {
+            const data = JSON.parse(e.data);
+            pingResults.push(data);
+
+            // Update chart in real-time (show in ns for precision)
+            if (state.charts.latency) {
+                state.charts.latency.data.labels.push(`#${data.seq + 1}`);
+                // Use rtt_ns for more precision, show as microseconds in chart
+                state.charts.latency.data.datasets[0].data.push(data.success ? data.rtt_ns / 1000 : null);
+                state.charts.latency.update('none');
+            }
+        });
+
+        eventSource.addEventListener('complete', (e) => {
+            const data = JSON.parse(e.data);
+            eventSource.close();
+
+            // Update final stats (show in nanoseconds for precision)
+            if (data.stats) {
+                document.getElementById('ping-min').textContent = formatNs(data.stats.min_ns);
+                document.getElementById('ping-avg').textContent = formatNs(data.stats.avg_ns);
+                document.getElementById('ping-max').textContent = formatNs(data.stats.max_ns);
+                document.getElementById('ping-loss').textContent = (data.stats.loss_percent?.toFixed(1) || '0') + '%';
+
+                // Show HW vs SW count
+                const hwCount = data.stats.hw_timestamp_count || 0;
+                const swCount = data.stats.sw_timestamp_count || 0;
+                showNotification(
+                    `HW Ping complete: ${pingResults.filter(r => r.success).length}/${pingResults.length} ` +
+                    `(HW: ${hwCount}, SW: ${swCount})`,
+                    'success'
+                );
+            }
+
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = 'HW Ping';
+            }
+        });
+
+        eventSource.addEventListener('error', (e) => {
+            if (e.data) {
+                showNotification(`Error: ${e.data}`, 'error');
+            }
+            eventSource.close();
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = 'HW Ping';
+            }
+            resetPingStats();
+        });
+
+        eventSource.onerror = () => {
+            eventSource.close();
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = 'HW Ping';
+            }
+            if (pingResults.length === 0) {
+                showNotification('Connection failed', 'error');
+                resetPingStats();
+            }
+        };
+
+    } catch (e) {
+        showNotification(`Error: ${e.message}`, 'error');
+        resetPingStats();
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = 'HW Ping';
+        }
+    }
+}
+
+// Format nanoseconds for display
+function formatNs(ns) {
+    if (ns === undefined || ns === null) return '-';
+    if (ns < 1000) return ns.toFixed(0) + ' ns';
+    if (ns < 1000000) return (ns / 1000).toFixed(2) + ' µs';
+    return (ns / 1000000).toFixed(2) + ' ms';
+}
+
+// Check HW timestamp capability on page load
+document.addEventListener('DOMContentLoaded', () => {
+    checkTimestampCapability();
+});
+
+// Add event listener for HW ping button if exists
+document.getElementById('btn-hwping-start')?.addEventListener('click', startHwPingTest);

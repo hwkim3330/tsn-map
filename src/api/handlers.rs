@@ -946,3 +946,227 @@ pub async fn configure_tas(
 
     Json(ApiResponse::error("TAS configuration requires specific hardware support. Use tc-taprio or vendor-specific tools."))
 }
+
+// ============================================
+// Hardware Timestamp APIs
+// ============================================
+
+use crate::tester::hwts::{HwLatencyTester, TimestampCapability, check_timestamp_capability};
+
+// GET /api/timestamp/capability - Check hardware timestamp support
+#[derive(Deserialize)]
+pub struct TimestampCapabilityParams {
+    pub interface: Option<String>,
+}
+
+pub async fn get_timestamp_capability(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<TimestampCapabilityParams>,
+) -> Json<ApiResponse<TimestampCapability>> {
+    let interface = params.interface.unwrap_or_else(|| state.interface.clone());
+
+    match check_timestamp_capability(&interface) {
+        Ok(cap) => Json(ApiResponse::success(cap)),
+        Err(e) => Json(ApiResponse::error(&format!("Failed to check capability: {}", e))),
+    }
+}
+
+// GET /api/test/hwping/stream - SSE streaming HW-timestamped ping test
+#[derive(Deserialize)]
+pub struct HwPingStreamParams {
+    pub target: String,
+    pub count: Option<u32>,
+    pub interval: Option<u32>,
+    pub interface: Option<String>,
+}
+
+#[derive(Serialize, Clone)]
+pub struct HwPingResult {
+    pub seq: u32,
+    pub success: bool,
+    pub rtt_ns: i64,
+    pub rtt_us: f64,
+    pub timestamp_source: String,  // "hardware", "software", or "none"
+}
+
+#[derive(Serialize)]
+pub struct HwPingStats {
+    pub min_ns: i64,
+    pub max_ns: i64,
+    pub avg_ns: f64,
+    pub jitter_ns: f64,
+    pub min_us: f64,
+    pub max_us: f64,
+    pub avg_us: f64,
+    pub jitter_us: f64,
+    pub loss_percent: f64,
+    pub hw_timestamp_count: u32,
+    pub sw_timestamp_count: u32,
+}
+
+pub async fn hwping_stream(
+    Query(params): Query<HwPingStreamParams>,
+) -> Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>> {
+    use async_stream::stream;
+    use tokio::time::{sleep, Duration};
+    use std::net::IpAddr;
+
+    let count = params.count.unwrap_or(10).min(100);
+    let interval = params.interval.unwrap_or(100).max(10); // min 10ms
+    let interface = params.interface;
+    let target = params.target.clone();
+
+    let stream = stream! {
+        // Parse target IP
+        let target_ip: IpAddr = if let Ok(ip) = target.parse() {
+            ip
+        } else {
+            // Try DNS resolution
+            match tokio::net::lookup_host(format!("{}:7878", target)).await {
+                Ok(mut addrs) => match addrs.next() {
+                    Some(addr) => addr.ip(),
+                    None => {
+                        yield Ok(Event::default().event("error").data("Could not resolve hostname"));
+                        return;
+                    }
+                },
+                Err(_) => {
+                    yield Ok(Event::default().event("error").data("Could not resolve hostname"));
+                    return;
+                }
+            }
+        };
+
+        // Create HW timestamp tester in blocking task
+        let tester = match tokio::task::spawn_blocking({
+            let interface = interface.clone();
+            move || {
+                HwLatencyTester::new(target_ip, 7878, interface.as_deref())
+            }
+        }).await {
+            Ok(Ok(t)) => t,
+            Ok(Err(e)) => {
+                yield Ok(Event::default().event("error").data(format!("Failed to create tester: {}", e)));
+                return;
+            }
+            Err(e) => {
+                yield Ok(Event::default().event("error").data(format!("Task error: {}", e)));
+                return;
+            }
+        };
+
+        // Send initial info about HW timestamp support
+        let hw_enabled = tester.hw_timestamps_enabled();
+        let info = serde_json::json!({
+            "hw_timestamps_enabled": hw_enabled,
+            "target": target,
+        });
+        yield Ok(Event::default().event("info").data(info.to_string()));
+
+        let mut results = Vec::with_capacity(count as usize);
+
+        // Run ping test
+        for seq in 0..count {
+            // Run single ping in blocking task
+            let ping_result = tokio::task::spawn_blocking({
+                let tester_ref = unsafe {
+                    // Safety: tester lives for the duration of the stream
+                    std::mem::transmute::<&HwLatencyTester, &'static HwLatencyTester>(&tester)
+                };
+                move || tester_ref.ping(seq)
+            }).await;
+
+            let result = match ping_result {
+                Ok(r) => HwPingResult {
+                    seq: r.seq,
+                    success: r.success,
+                    rtt_ns: r.rtt_ns,
+                    rtt_us: r.rtt_us,
+                    timestamp_source: match r.timestamp_source {
+                        crate::tester::hwts::TimestampSource::Hardware => "hardware".to_string(),
+                        crate::tester::hwts::TimestampSource::Software => "software".to_string(),
+                        crate::tester::hwts::TimestampSource::None => "none".to_string(),
+                    },
+                },
+                Err(_) => HwPingResult {
+                    seq,
+                    success: false,
+                    rtt_ns: 0,
+                    rtt_us: 0.0,
+                    timestamp_source: "none".to_string(),
+                },
+            };
+
+            results.push(result.clone());
+
+            // Send individual result
+            let data = serde_json::to_string(&result).unwrap_or_default();
+            yield Ok(Event::default().event("ping").data(data));
+
+            if seq < count - 1 {
+                sleep(Duration::from_millis(interval as u64)).await;
+            }
+        }
+
+        // Calculate and send final stats
+        let success_results: Vec<_> = results.iter().filter(|r| r.success).collect();
+
+        let stats = if success_results.is_empty() {
+            HwPingStats {
+                min_ns: 0,
+                max_ns: 0,
+                avg_ns: 0.0,
+                jitter_ns: 0.0,
+                min_us: 0.0,
+                max_us: 0.0,
+                avg_us: 0.0,
+                jitter_us: 0.0,
+                loss_percent: 100.0,
+                hw_timestamp_count: 0,
+                sw_timestamp_count: 0,
+            }
+        } else {
+            let rtts_ns: Vec<i64> = success_results.iter().map(|r| r.rtt_ns).collect();
+            let min_ns = *rtts_ns.iter().min().unwrap_or(&0);
+            let max_ns = *rtts_ns.iter().max().unwrap_or(&0);
+            let avg_ns = rtts_ns.iter().sum::<i64>() as f64 / rtts_ns.len() as f64;
+
+            let variance: f64 = rtts_ns.iter()
+                .map(|&x| (x as f64 - avg_ns).powi(2))
+                .sum::<f64>() / rtts_ns.len() as f64;
+            let jitter_ns = variance.sqrt();
+
+            let hw_count = success_results.iter()
+                .filter(|r| r.timestamp_source == "hardware")
+                .count() as u32;
+            let sw_count = success_results.iter()
+                .filter(|r| r.timestamp_source == "software")
+                .count() as u32;
+
+            let loss = ((results.len() - success_results.len()) as f64 / results.len() as f64) * 100.0;
+
+            HwPingStats {
+                min_ns,
+                max_ns,
+                avg_ns,
+                jitter_ns,
+                min_us: min_ns as f64 / 1000.0,
+                max_us: max_ns as f64 / 1000.0,
+                avg_us: avg_ns / 1000.0,
+                jitter_us: jitter_ns / 1000.0,
+                loss_percent: loss,
+                hw_timestamp_count: hw_count,
+                sw_timestamp_count: sw_count,
+            }
+        };
+
+        let final_data = serde_json::json!({
+            "stats": stats,
+            "total": results.len(),
+            "hw_timestamps_enabled": hw_enabled,
+        });
+        yield Ok(Event::default().event("complete").data(final_data.to_string()));
+    };
+
+    Sse::new(stream)
+}

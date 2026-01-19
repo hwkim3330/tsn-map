@@ -228,6 +228,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // TSN configuration
         .route("/api/tsn/cbs", post(api::handlers::configure_cbs))
         .route("/api/tsn/tas", post(api::handlers::configure_tas))
+        // Hardware timestamp APIs
+        .route("/api/timestamp/capability", get(api::handlers::get_timestamp_capability))
+        .route("/api/test/hwping/stream", get(api::handlers::hwping_stream))
         // Static files (web frontend)
         .fallback_service(ServeDir::new(get_web_dir()))
         // Middleware
