@@ -22,6 +22,31 @@ use chrono::Utc;
 use crate::capture::{CaptureManager, CapturedPacket};
 use crate::topology::TopologyManager;
 
+fn get_web_dir() -> std::path::PathBuf {
+    // Try multiple locations for the web directory
+    let candidates = vec![
+        // Current directory
+        std::path::PathBuf::from("web"),
+        // Relative to executable
+        std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|p| p.join("../web")))
+            .unwrap_or_default(),
+        // Project directory (for development)
+        std::path::PathBuf::from("/home/kim/tsn-map/web"),
+    ];
+
+    for path in candidates {
+        if path.exists() && path.join("index.html").exists() {
+            tracing::info!("Serving web files from: {:?}", path);
+            return path;
+        }
+    }
+
+    tracing::warn!("Web directory not found, using 'web' as fallback");
+    std::path::PathBuf::from("web")
+}
+
 #[derive(Parser, Debug)]
 #[command(name = "tsn-map")]
 #[command(about = "TSN Network Visualization and Analysis Tool")]
@@ -202,7 +227,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/tsn/cbs", post(api::handlers::configure_cbs))
         .route("/api/tsn/tas", post(api::handlers::configure_tas))
         // Static files (web frontend)
-        .nest_service("/", ServeDir::new("web"))
+        .fallback_service(ServeDir::new(get_web_dir()))
         // Middleware
         .layer(TraceLayer::new_for_http())
         .layer(CorsLayer::new()
