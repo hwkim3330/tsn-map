@@ -340,9 +340,9 @@ body {
 .packet-list th:nth-child(2),
 .packet-list td:nth-child(2) { width: 70px; min-width: 50px; }   /* Time */
 .packet-list th:nth-child(3),
-.packet-list td:nth-child(3) { width: 120px; min-width: 90px; }  /* Source - fits 192.168.100.123 */
+.packet-list td:nth-child(3) { width: 120px; min-width: 90px; max-width: 120px; }  /* Source */
 .packet-list th:nth-child(4),
-.packet-list td:nth-child(4) { width: 120px; min-width: 90px; }  /* Destination */
+.packet-list td:nth-child(4) { width: 120px; min-width: 90px; max-width: 120px; }  /* Destination */
 .packet-list th:nth-child(5),
 .packet-list td:nth-child(5) { width: 65px; min-width: 50px; }   /* Protocol */
 .packet-list th:nth-child(6),

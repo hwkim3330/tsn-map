@@ -364,49 +364,7 @@ function createPacketRow(packet) {
 // Shorten IPv6 and long addresses for display
 function shortenAddress(addr) {
     if (!addr) return '-';
-
-    // Check if IPv6 (contains multiple colons and is long)
-    const colonCount = (addr.match(/:/g) || []).length;
-
-    // IPv6: compress for display
-    if (colonCount >= 4 && addr.length > 15) {
-        // Already compressed
-        if (addr.includes('::')) {
-            // Still too long, show prefix::suffix
-            if (addr.length > 25) {
-                const parts = addr.split('::');
-                return parts[0].substring(0, 8) + '::' + (parts[1] || '').slice(-8);
-            }
-            return addr;
-        }
-        // Full IPv6, compress middle zeros
-        const parts = addr.split(':');
-        if (parts.length === 8) {
-            // Find longest run of zeros to compress
-            let start = -1, len = 0, maxStart = -1, maxLen = 0;
-            for (let i = 0; i < parts.length; i++) {
-                if (parts[i] === '0' || parts[i] === '0000') {
-                    if (start === -1) start = i;
-                    len++;
-                } else {
-                    if (len > maxLen) { maxStart = start; maxLen = len; }
-                    start = -1; len = 0;
-                }
-            }
-            if (len > maxLen) { maxStart = start; maxLen = len; }
-
-            if (maxLen >= 2) {
-                const before = parts.slice(0, maxStart).join(':');
-                const after = parts.slice(maxStart + maxLen).join(':');
-                return (before || '') + '::' + (after || '');
-            }
-        }
-        // Fallback: show first and last parts
-        return parts.slice(0, 2).join(':') + '::' + parts.slice(-1)[0];
-    }
-
-    // MAC address: keep as is (it's useful to see)
-    return addr;
+    return addr;  // Let CSS handle truncation with text-overflow
 }
 
 function updateHostInfo(packet) {
