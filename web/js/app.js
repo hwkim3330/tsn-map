@@ -2241,13 +2241,6 @@ function formatDuration(ms) {
     return `${(ms / 3600000).toFixed(1)}h`;
 }
 
-function formatBytes(bytes) {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-    return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
-}
-
 function startIoGraphRefresh() {
     const autoRefresh = document.getElementById('iograph-auto-refresh');
     if (autoRefresh && autoRefresh.checked) {
