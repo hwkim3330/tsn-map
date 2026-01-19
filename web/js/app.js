@@ -1936,7 +1936,7 @@ function initializeTestCharts() {
 // Tester Functions
 // ============================================
 
-// Ping/Latency Test with real-time SSE streaming
+// Ping/Latency Test using POST API
 async function startPingTest() {
     const target = document.getElementById('ping-target').value.trim();
     const count = parseInt(document.getElementById('ping-count').value) || 10;
@@ -1961,33 +1961,30 @@ async function startPingTest() {
     if (state.charts.latency) {
         state.charts.latency.data.labels = [];
         state.charts.latency.data.datasets[0].data = [];
+        state.charts.latency.data.datasets[0].label = 'RTT (ms)';
         state.charts.latency.update();
     }
 
-    const pingResults = [];
-
     try {
-        // Use SSE for real-time updates
-        const url = `/api/test/ping/stream?target=${encodeURIComponent(target)}&count=${count}&interval=${interval}`;
-        const eventSource = new EventSource(url);
-
-        eventSource.addEventListener('ping', (e) => {
-            const data = JSON.parse(e.data);
-            pingResults.push(data);
-
-            // Update chart in real-time
-            if (state.charts.latency) {
-                state.charts.latency.data.labels.push(`#${data.seq + 1}`);
-                state.charts.latency.data.datasets[0].data.push(data.success ? data.rtt_ms : null);
-                state.charts.latency.update('none');  // No animation for smooth updates
-            }
+        const result = await apiCall('/api/test/ping', 'POST', {
+            target,
+            count,
+            interval
         });
 
-        eventSource.addEventListener('complete', (e) => {
-            const data = JSON.parse(e.data);
-            eventSource.close();
+        if (result && result.success && result.data) {
+            const data = result.data;
 
-            // Update final stats
+            // Update chart
+            if (state.charts.latency && data.results) {
+                const labels = data.results.map((_, i) => `#${i + 1}`);
+                const values = data.results.map(r => r.success ? r.rtt_ms : null);
+                state.charts.latency.data.labels = labels;
+                state.charts.latency.data.datasets[0].data = values;
+                state.charts.latency.update();
+            }
+
+            // Update stats
             if (data.stats) {
                 document.getElementById('ping-min').textContent = data.stats.min_ms?.toFixed(2) || '-';
                 document.getElementById('ping-avg').textContent = data.stats.avg_ms?.toFixed(2) || '-';
@@ -1995,36 +1992,18 @@ async function startPingTest() {
                 document.getElementById('ping-loss').textContent = (data.stats.loss_percent?.toFixed(1) || '0') + '%';
             }
 
-            btn.disabled = false;
-            btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Start Test';
-            showNotification(`Ping complete: ${pingResults.filter(r => r.success).length}/${pingResults.length} successful`, 'success');
-        });
-
-        eventSource.addEventListener('error', (e) => {
-            if (e.data) {
-                showNotification(`Error: ${e.data}`, 'error');
-            }
-            eventSource.close();
-            btn.disabled = false;
-            btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Start Test';
+            const successCount = data.results?.filter(r => r.success).length || 0;
+            showNotification(`Ping complete: ${successCount}/${count} successful`, 'success');
+        } else {
+            showNotification(`Ping failed: ${result?.error || 'Unknown error'}`, 'error');
             resetPingStats();
-        });
-
-        eventSource.onerror = () => {
-            eventSource.close();
-            btn.disabled = false;
-            btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Start Test';
-            if (pingResults.length === 0) {
-                showNotification('Connection failed', 'error');
-                resetPingStats();
-            }
-        };
-
+        }
     } catch (e) {
         showNotification(`Error: ${e.message}`, 'error');
         resetPingStats();
+    } finally {
         btn.disabled = false;
-        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Start Test';
+        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> ICMP Ping';
     }
 }
 
@@ -2062,13 +2041,14 @@ function renderPingResults(data) {
     showNotification(`Ping complete: ${data.results.filter(r => r.success).length}/${data.results.length} successful`, 'success');
 }
 
-// Throughput Test with real-time SSE streaming
+// Throughput Test using POST API
 async function startThroughputTest() {
     const target = document.getElementById('throughput-target').value.trim();
     const duration = parseInt(document.getElementById('throughput-duration').value) || 10;
     const bandwidth = parseInt(document.getElementById('throughput-bandwidth').value) || 100;
+    const mode = document.getElementById('throughput-mode')?.value || 'client';
 
-    if (!target) {
+    if (!target && mode === 'client') {
         showNotification('Please enter a target host', 'error');
         return;
     }
@@ -2091,57 +2071,38 @@ async function startThroughputTest() {
     }
 
     try {
-        // Use SSE for real-time updates
-        const url = `/api/test/throughput/stream?target=${encodeURIComponent(target)}&duration=${duration}&bandwidth=${bandwidth}`;
-        const eventSource = new EventSource(url);
+        const result = await apiCall('/api/test/throughput', 'POST', {
+            target,
+            duration,
+            bandwidth,
+            mode
+        });
 
-        eventSource.addEventListener('throughput', (e) => {
-            const data = JSON.parse(e.data);
+        if (result && result.success && result.data) {
+            const data = result.data;
 
-            // Update live stats
-            document.getElementById('tp-bandwidth').textContent = data.bandwidth_mbps.toFixed(2) + ' Mbps';
-            document.getElementById('tp-packets').textContent = data.total_packets.toLocaleString();
+            // Update stats
+            const mbps = data.bandwidth_bps ? (data.bandwidth_bps / 1e6).toFixed(2) : 0;
+            document.getElementById('tp-bandwidth').textContent = mbps + ' Mbps';
+            document.getElementById('tp-packets').textContent = (data.packets_sent || 0).toLocaleString();
+            document.getElementById('tp-loss').textContent = (data.loss_percent?.toFixed(2) || '0') + '%';
 
-            // Update chart in real-time
+            // Update chart with single result
             if (state.charts.throughput) {
-                state.charts.throughput.data.labels.push(`${data.sec}s`);
-                state.charts.throughput.data.datasets[0].data.push(data.bandwidth_mbps);
-                state.charts.throughput.update('none');
+                state.charts.throughput.data.labels = ['Result'];
+                state.charts.throughput.data.datasets[0].data = [parseFloat(mbps)];
+                state.charts.throughput.update();
             }
-        });
 
-        eventSource.addEventListener('complete', (e) => {
-            const data = JSON.parse(e.data);
-            eventSource.close();
-
-            // Update final stats
-            document.getElementById('tp-bandwidth').textContent = data.avg_bandwidth_mbps.toFixed(2) + ' Mbps';
-            document.getElementById('tp-packets').textContent = data.total_packets.toLocaleString();
-
-            btn.disabled = false;
-            btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Start Test';
-            showNotification(`Throughput: ${data.avg_bandwidth_mbps.toFixed(2)} Mbps (${data.total_packets.toLocaleString()} packets)`, 'success');
-        });
-
-        eventSource.addEventListener('error', (e) => {
-            if (e.data) {
-                showNotification(`Error: ${e.data}`, 'error');
-            }
-            eventSource.close();
-            btn.disabled = false;
-            btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Start Test';
+            showNotification(`Throughput: ${mbps} Mbps (${(data.packets_sent || 0).toLocaleString()} packets)`, 'success');
+        } else {
+            showNotification(`Throughput test failed: ${result?.error || 'Unknown error'}`, 'error');
             resetThroughputStats();
-        });
-
-        eventSource.onerror = () => {
-            eventSource.close();
-            btn.disabled = false;
-            btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Start Test';
-        };
-
+        }
     } catch (e) {
         showNotification(`Error: ${e.message}`, 'error');
         resetThroughputStats();
+    } finally {
         btn.disabled = false;
         btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Start Test';
     }
@@ -2277,7 +2238,7 @@ async function checkTimestampCapability() {
     return null;
 }
 
-// Hardware-timestamped ping test
+// Hardware-timestamped ping test (uses SSE with POST fallback)
 async function startHwPingTest() {
     const target = document.getElementById('ping-target').value.trim();
     const count = parseInt(document.getElementById('ping-count').value) || 10;
@@ -2300,26 +2261,38 @@ async function startHwPingTest() {
     document.getElementById('ping-max').textContent = '...';
     document.getElementById('ping-loss').textContent = '...';
 
-    // Update unit label to show ns for HW timestamps
-    const unitLabels = document.querySelectorAll('.ping-unit');
-    unitLabels.forEach(el => el.textContent = 'ns');
-
     // Initialize chart with empty data
     if (state.charts.latency) {
         state.charts.latency.data.labels = [];
         state.charts.latency.data.datasets[0].data = [];
-        state.charts.latency.data.datasets[0].label = 'RTT (ns)';
+        state.charts.latency.data.datasets[0].label = 'RTT (µs)';
         state.charts.latency.update();
     }
 
-    const pingResults = [];
-
+    // Try SSE first, fall back to POST if not available
     try {
-        // Use HW ping SSE endpoint
         const url = `/api/test/hwping/stream?target=${encodeURIComponent(target)}&count=${count}&interval=${interval}`;
         const eventSource = new EventSource(url);
+        const pingResults = [];
+        let sseWorking = false;
+
+        // Timeout to detect if SSE isn't working
+        const timeout = setTimeout(() => {
+            if (!sseWorking && pingResults.length === 0) {
+                eventSource.close();
+                // Fall back to regular ping
+                showNotification('HW Ping not available, using ICMP', 'warning');
+                startPingTest();
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> HW Ping';
+                }
+            }
+        }, 3000);
 
         eventSource.addEventListener('info', (e) => {
+            sseWorking = true;
+            clearTimeout(timeout);
             const data = JSON.parse(e.data);
             const hwStatus = document.getElementById('hwts-status');
             if (hwStatus) {
@@ -2334,66 +2307,68 @@ async function startHwPingTest() {
         });
 
         eventSource.addEventListener('ping', (e) => {
+            sseWorking = true;
+            clearTimeout(timeout);
             const data = JSON.parse(e.data);
             pingResults.push(data);
 
-            // Update chart in real-time (show in ns for precision)
+            // Update chart in real-time (show in microseconds)
             if (state.charts.latency) {
                 state.charts.latency.data.labels.push(`#${data.seq + 1}`);
-                // Use rtt_ns for more precision, show as microseconds in chart
-                state.charts.latency.data.datasets[0].data.push(data.success ? data.rtt_ns / 1000 : null);
+                state.charts.latency.data.datasets[0].data.push(data.success ? data.rtt_us : null);
                 state.charts.latency.update('none');
             }
         });
 
         eventSource.addEventListener('complete', (e) => {
+            clearTimeout(timeout);
             const data = JSON.parse(e.data);
             eventSource.close();
 
-            // Update final stats (show in nanoseconds for precision)
+            // Update final stats
             if (data.stats) {
                 document.getElementById('ping-min').textContent = formatNs(data.stats.min_ns);
                 document.getElementById('ping-avg').textContent = formatNs(data.stats.avg_ns);
                 document.getElementById('ping-max').textContent = formatNs(data.stats.max_ns);
                 document.getElementById('ping-loss').textContent = (data.stats.loss_percent?.toFixed(1) || '0') + '%';
 
-                // Show HW vs SW count
                 const hwCount = data.stats.hw_timestamp_count || 0;
                 const swCount = data.stats.sw_timestamp_count || 0;
                 showNotification(
-                    `HW Ping complete: ${pingResults.filter(r => r.success).length}/${pingResults.length} ` +
-                    `(HW: ${hwCount}, SW: ${swCount})`,
+                    `HW Ping: ${pingResults.filter(r => r.success).length}/${pingResults.length} (HW: ${hwCount}, SW: ${swCount})`,
                     'success'
                 );
             }
 
             if (btn) {
                 btn.disabled = false;
-                btn.innerHTML = 'HW Ping';
+                btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> HW Ping';
             }
         });
 
         eventSource.addEventListener('error', (e) => {
-            if (e.data) {
-                showNotification(`Error: ${e.data}`, 'error');
-            }
+            clearTimeout(timeout);
             eventSource.close();
+            // Fall back to regular ping
+            showNotification('HW Ping failed, using ICMP', 'warning');
+            startPingTest();
             if (btn) {
                 btn.disabled = false;
-                btn.innerHTML = 'HW Ping';
+                btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> HW Ping';
             }
-            resetPingStats();
         });
 
         eventSource.onerror = () => {
+            clearTimeout(timeout);
             eventSource.close();
+            if (pingResults.length === 0) {
+                // Fall back to regular ping
+                showNotification('HW Ping not available, using ICMP', 'warning');
+                startPingTest();
+            }
             if (btn) {
                 btn.disabled = false;
-                btn.innerHTML = 'HW Ping';
-            }
-            if (pingResults.length === 0) {
-                showNotification('Connection failed', 'error');
-                resetPingStats();
+                btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> HW Ping';
             }
         };
 
@@ -2402,7 +2377,7 @@ async function startHwPingTest() {
         resetPingStats();
         if (btn) {
             btn.disabled = false;
-            btn.innerHTML = 'HW Ping';
+            btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> HW Ping';
         }
     }
 }
