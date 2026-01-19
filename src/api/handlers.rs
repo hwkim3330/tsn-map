@@ -748,6 +748,134 @@ pub async fn throughput_test(
     }
 }
 
+// GET /api/test/throughput/stream - SSE streaming throughput test
+#[derive(Deserialize)]
+pub struct ThroughputStreamParams {
+    pub target: String,
+    pub duration: Option<u32>,
+    pub bandwidth: Option<u32>,
+}
+
+pub async fn throughput_stream(
+    Query(params): Query<ThroughputStreamParams>,
+) -> Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>> {
+    use async_stream::stream;
+    use tokio::time::{sleep, Duration, Instant};
+    use std::net::{IpAddr, SocketAddr, UdpSocket};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    let duration = params.duration.unwrap_or(10).min(60) as u64;
+    let bandwidth_limit = params.bandwidth.map(|b| b as u64 * 1_000_000);
+    let packet_size = 1400usize;
+
+    // Parse target
+    let target_addr: Option<SocketAddr> = if params.target.contains(':') {
+        params.target.parse().ok()
+    } else {
+        params.target.parse::<IpAddr>().ok().map(|ip| SocketAddr::new(ip, 7879))
+            .or_else(|| {
+                std::net::ToSocketAddrs::to_socket_addrs(&format!("{}:7879", params.target))
+                    .ok()
+                    .and_then(|mut addrs| addrs.next())
+            })
+    };
+
+    let stream = stream! {
+        let Some(target) = target_addr else {
+            yield Ok(Event::default().event("error").data("Could not resolve target"));
+            return;
+        };
+
+        // Create socket
+        let socket = match UdpSocket::bind("0.0.0.0:0") {
+            Ok(s) => Arc::new(s),
+            Err(e) => {
+                yield Ok(Event::default().event("error").data(format!("Socket error: {}", e)));
+                return;
+            }
+        };
+        let _ = socket.set_write_timeout(Some(std::time::Duration::from_millis(100)));
+
+        let bytes_sent = Arc::new(AtomicU64::new(0));
+        let packets_sent = Arc::new(AtomicU64::new(0));
+        let running = Arc::new(std::sync::atomic::AtomicBool::new(true));
+
+        // Spawn sender thread
+        let sender_socket = socket.clone();
+        let sender_bytes = bytes_sent.clone();
+        let sender_packets = packets_sent.clone();
+        let sender_running = running.clone();
+
+        let sender_handle = std::thread::spawn(move || {
+            let mut packet_buf = vec![0u8; packet_size];
+            // Fill with pattern
+            for i in 0..packet_size {
+                packet_buf[i] = (i & 0xFF) as u8;
+            }
+
+            let packet_delay = if let Some(bps) = bandwidth_limit {
+                let bits_per_packet = (packet_size * 8) as f64;
+                std::time::Duration::from_secs_f64(bits_per_packet / bps as f64)
+            } else {
+                std::time::Duration::from_micros(10) // Small delay to not overwhelm
+            };
+
+            while sender_running.load(Ordering::Relaxed) {
+                if sender_socket.send_to(&packet_buf, target).is_ok() {
+                    sender_bytes.fetch_add(packet_size as u64, Ordering::Relaxed);
+                    sender_packets.fetch_add(1, Ordering::Relaxed);
+                }
+                if !packet_delay.is_zero() {
+                    std::thread::sleep(packet_delay);
+                }
+            }
+        });
+
+        let start = Instant::now();
+        let mut last_bytes: u64 = 0;
+
+        // Stream updates every second
+        for sec in 1..=duration {
+            sleep(Duration::from_secs(1)).await;
+
+            let current_bytes = bytes_sent.load(Ordering::Relaxed);
+            let current_packets = packets_sent.load(Ordering::Relaxed);
+            let interval_bytes = current_bytes - last_bytes;
+            last_bytes = current_bytes;
+
+            let bandwidth_mbps = (interval_bytes as f64 * 8.0) / 1_000_000.0;
+
+            let data = serde_json::json!({
+                "sec": sec,
+                "bandwidth_mbps": bandwidth_mbps,
+                "total_bytes": current_bytes,
+                "total_packets": current_packets,
+            });
+            yield Ok(Event::default().event("throughput").data(data.to_string()));
+        }
+
+        // Stop sender
+        running.store(false, Ordering::Relaxed);
+        let _ = sender_handle.join();
+
+        let total_bytes = bytes_sent.load(Ordering::Relaxed);
+        let total_packets = packets_sent.load(Ordering::Relaxed);
+        let elapsed = start.elapsed().as_secs_f64();
+        let avg_bandwidth_mbps = (total_bytes as f64 * 8.0) / (elapsed * 1_000_000.0);
+
+        let final_data = serde_json::json!({
+            "total_bytes": total_bytes,
+            "total_packets": total_packets,
+            "duration_secs": elapsed,
+            "avg_bandwidth_mbps": avg_bandwidth_mbps,
+        });
+        yield Ok(Event::default().event("complete").data(final_data.to_string()));
+    };
+
+    Sse::new(stream)
+}
+
 // ============================================
 // TSN Configuration Endpoints
 // ============================================
