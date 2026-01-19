@@ -459,7 +459,7 @@ pub struct PingRequest {
     pub interval: Option<u32>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct PingResult {
     pub success: bool,
     pub rtt_ms: f64,
@@ -537,6 +537,108 @@ pub async fn ping_test(
         }
         Err(e) => Json(ApiResponse::error(&format!("Ping test failed: {}", e))),
     }
+}
+
+// GET /api/test/ping/stream - SSE streaming ping test
+#[derive(Deserialize)]
+pub struct PingStreamParams {
+    pub target: String,
+    pub count: Option<u32>,
+    pub interval: Option<u32>,
+}
+
+pub async fn ping_stream(
+    Query(params): Query<PingStreamParams>,
+) -> Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>> {
+    use crate::tester::latency::icmp::ping_icmp;
+    use std::net::Ipv4Addr;
+    use async_stream::stream;
+    use tokio::time::{sleep, Duration};
+
+    let count = params.count.unwrap_or(10).min(100);
+    let interval = params.interval.unwrap_or(1000);
+
+    // Parse target IP
+    let target_ip: Option<Ipv4Addr> = params.target.parse().ok().or_else(|| {
+        // Sync DNS lookup for simplicity (in stream context)
+        std::net::ToSocketAddrs::to_socket_addrs(&format!("{}:0", params.target))
+            .ok()
+            .and_then(|mut addrs| addrs.next())
+            .and_then(|addr| match addr.ip() {
+                std::net::IpAddr::V4(ip) => Some(ip),
+                _ => None,
+            })
+    });
+
+    let stream = stream! {
+        let Some(target) = target_ip else {
+            yield Ok(Event::default().event("error").data("Could not resolve hostname"));
+            return;
+        };
+
+        let mut results: Vec<PingResult> = Vec::new();
+
+        for seq in 0..count {
+            // Run ping in blocking task
+            let t = target;
+            let result = tokio::task::spawn_blocking(move || {
+                ping_icmp(t, seq as u16, 2000)
+            }).await;
+
+            let ping_result = match result {
+                Ok(Some(rtt_ms)) => PingResult {
+                    success: true,
+                    rtt_ms,
+                    ttl: None,
+                },
+                _ => PingResult {
+                    success: false,
+                    rtt_ms: 0.0,
+                    ttl: None,
+                },
+            };
+
+            results.push(ping_result.clone());
+
+            // Send individual result
+            let data = serde_json::json!({
+                "seq": seq,
+                "success": ping_result.success,
+                "rtt_ms": ping_result.rtt_ms,
+            });
+            yield Ok(Event::default().event("ping").data(data.to_string()));
+
+            if seq < count - 1 {
+                sleep(Duration::from_millis(interval as u64)).await;
+            }
+        }
+
+        // Send final stats
+        let successful: Vec<_> = results.iter().filter(|r| r.success).collect();
+        let stats = if successful.is_empty() {
+            PingStats {
+                min_ms: 0.0,
+                avg_ms: 0.0,
+                max_ms: 0.0,
+                loss_percent: 100.0,
+            }
+        } else {
+            let rtts: Vec<f64> = successful.iter().map(|r| r.rtt_ms).collect();
+            let min = rtts.iter().cloned().fold(f64::INFINITY, f64::min);
+            let max = rtts.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+            let avg = rtts.iter().sum::<f64>() / rtts.len() as f64;
+            let loss = ((results.len() - successful.len()) as f64 / results.len() as f64) * 100.0;
+            PingStats { min_ms: min, avg_ms: avg, max_ms: max, loss_percent: loss }
+        };
+
+        let final_data = serde_json::json!({
+            "stats": stats,
+            "total": results.len(),
+        });
+        yield Ok(Event::default().event("complete").data(final_data.to_string()));
+    };
+
+    Sse::new(stream)
 }
 
 #[derive(Deserialize)]

@@ -101,6 +101,7 @@ function setupEventListeners() {
         if (e.key === 'Enter') applyFilter();
     });
     document.getElementById('btn-apply-filter').addEventListener('click', applyFilter);
+    document.getElementById('btn-clear-filter').addEventListener('click', clearFilter);
 
     // Pagination
     document.getElementById('btn-first-page').addEventListener('click', () => goToPage(1));
@@ -633,6 +634,12 @@ function formatTime(timestamp) {
 // Filter
 function applyFilter() {
     state.filter = document.getElementById('packet-filter').value.trim();
+    renderPacketList();
+}
+
+function clearFilter() {
+    document.getElementById('packet-filter').value = '';
+    state.filter = '';
     renderPacketList();
 }
 
@@ -1929,7 +1936,7 @@ function initializeTestCharts() {
 // Tester Functions
 // ============================================
 
-// Ping/Latency Test
+// Ping/Latency Test with real-time SSE streaming
 async function startPingTest() {
     const target = document.getElementById('ping-target').value.trim();
     const count = parseInt(document.getElementById('ping-count').value) || 10;
@@ -1944,32 +1951,81 @@ async function startPingTest() {
     btn.disabled = true;
     btn.innerHTML = '<span class="btn-spinner"></span> Testing...';
 
-    // Reset stats
+    // Reset stats and chart
     document.getElementById('ping-min').textContent = '...';
     document.getElementById('ping-avg').textContent = '...';
     document.getElementById('ping-max').textContent = '...';
     document.getElementById('ping-loss').textContent = '...';
 
+    // Initialize chart with empty data
+    if (state.charts.latency) {
+        state.charts.latency.data.labels = [];
+        state.charts.latency.data.datasets[0].data = [];
+        state.charts.latency.update();
+    }
+
+    const pingResults = [];
+
     try {
-        const result = await apiCall('/api/test/ping', 'POST', {
-            target,
-            count,
-            interval
+        // Use SSE for real-time updates
+        const url = `/api/test/ping/stream?target=${encodeURIComponent(target)}&count=${count}&interval=${interval}`;
+        const eventSource = new EventSource(url);
+
+        eventSource.addEventListener('ping', (e) => {
+            const data = JSON.parse(e.data);
+            pingResults.push(data);
+
+            // Update chart in real-time
+            if (state.charts.latency) {
+                state.charts.latency.data.labels.push(`#${data.seq + 1}`);
+                state.charts.latency.data.datasets[0].data.push(data.success ? data.rtt_ms : null);
+                state.charts.latency.update('none');  // No animation for smooth updates
+            }
         });
 
-        if (result && result.success) {
-            renderPingResults(result.data);
-        } else {
-            showNotification(`Error: ${result?.error || 'Unknown error'}`, 'error');
+        eventSource.addEventListener('complete', (e) => {
+            const data = JSON.parse(e.data);
+            eventSource.close();
+
+            // Update final stats
+            if (data.stats) {
+                document.getElementById('ping-min').textContent = data.stats.min_ms?.toFixed(2) || '-';
+                document.getElementById('ping-avg').textContent = data.stats.avg_ms?.toFixed(2) || '-';
+                document.getElementById('ping-max').textContent = data.stats.max_ms?.toFixed(2) || '-';
+                document.getElementById('ping-loss').textContent = (data.stats.loss_percent?.toFixed(1) || '0') + '%';
+            }
+
+            btn.disabled = false;
+            btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Start Test';
+            showNotification(`Ping complete: ${pingResults.filter(r => r.success).length}/${pingResults.length} successful`, 'success');
+        });
+
+        eventSource.addEventListener('error', (e) => {
+            if (e.data) {
+                showNotification(`Error: ${e.data}`, 'error');
+            }
+            eventSource.close();
+            btn.disabled = false;
+            btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Start Test';
             resetPingStats();
-        }
+        });
+
+        eventSource.onerror = () => {
+            eventSource.close();
+            btn.disabled = false;
+            btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Start Test';
+            if (pingResults.length === 0) {
+                showNotification('Connection failed', 'error');
+                resetPingStats();
+            }
+        };
+
     } catch (e) {
         showNotification(`Error: ${e.message}`, 'error');
         resetPingStats();
+        btn.disabled = false;
+        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Start Test';
     }
-
-    btn.disabled = false;
-    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Start Ping Test';
 }
 
 function resetPingStats() {
