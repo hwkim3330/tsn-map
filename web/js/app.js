@@ -469,6 +469,8 @@ function getProtocolClass(packet) {
     if (proto === 'ptp' || proto === 'lldp') return 'proto-network';
     if (proto === 'rrcp' || proto === 'loopback') return 'proto-l2';
     if (proto === 'esp' || proto === 'ah' || proto === 'macsec') return 'proto-security';
+    if (proto === 'hopopt' || proto === 'hop-by-hop') return 'proto-network';  // IPv6 Hop-by-Hop Options
+    if (proto.startsWith('0x')) return 'proto-l2';  // Unknown EtherType
     return '';
 }
 
@@ -1168,17 +1170,17 @@ function renderTopology() {
     node.append('circle')
         .attr('r', d => getNodeRadius(d))
         .attr('fill', d => getNodeColor(d))
-        .attr('stroke', d => d.tsn_capable ? '#f0883e' : '#30363d')
-        .attr('stroke-width', d => d.tsn_capable ? 3 : 2);
+        .attr('stroke', '#30363d')
+        .attr('stroke-width', 2);
 
-    // Labels
+    // Labels - show IP or MAC only (no hostname/domain)
     if (document.getElementById('show-labels').checked) {
         node.append('text')
             .attr('dx', d => getNodeRadius(d) + 5)
             .attr('dy', 4)
             .attr('fill', '#c9d1d9')
             .attr('font-size', '11px')
-            .text(d => d.hostname || d.ip_addresses?.[0] || d.mac_address?.substring(0, 8) || d.id.substring(0, 8));
+            .text(d => d.ip_addresses?.[0] || d.mac_address?.substring(0, 8) || d.id.substring(0, 8));
     }
 
     // Tooltip
@@ -1219,10 +1221,8 @@ function renderTopology() {
 function getNodeColor(node) {
     const type = node.node_type || 'Unknown';
 
-    // Color based on device type
+    // Color based on device type (simplified, no TSN-specific)
     const typeColors = {
-        'PtpGrandmaster': '#f0883e', // Orange - PTP Master
-        'TsnBridge': '#8b949e',      // Gray - TSN device
         'Router': '#d29922',         // Yellow - Router
         'Gateway': '#d29922',        // Yellow - Gateway
         'Switch': '#2ea043',         // Green - Switch
@@ -1230,7 +1230,7 @@ function getNodeColor(node) {
         'AccessPoint': '#a371f7',    // Purple - WiFi AP
         'Host': '#2f81f7',           // Blue - Host/PC
         'EndStation': '#58a6ff',     // Light blue - End device
-        'Repeater': '#7d8590',       // Gray - Repeater
+        'Server': '#bf5af2',         // Purple - Server
         'Unknown': '#8b949e',        // Gray - Unknown
     };
 
@@ -1244,7 +1244,7 @@ function getNodeRadius(node) {
 
     // Larger for important node types
     const type = node.node_type || 'Unknown';
-    if (type === 'PtpGrandmaster' || type === 'Router' || type === 'Gateway') {
+    if (type === 'Router' || type === 'Gateway' || type === 'Server') {
         return scaled + 5;
     }
     if (type === 'TsnBridge' || type === 'Switch') {
@@ -1303,15 +1303,12 @@ async function scanNetwork() {
 
 function updateTopologyStats() {
     const topology = state.topology;
-    const tsnCount = topology.nodes?.filter(n => n.tsn_capable).length || 0;
 
     const nodeCountEl = document.getElementById('topo-node-count');
     const linkCountEl = document.getElementById('topo-link-count');
-    const tsnCountEl = document.getElementById('topo-tsn-count');
 
     if (nodeCountEl) nodeCountEl.textContent = topology.nodes?.length || 0;
     if (linkCountEl) linkCountEl.textContent = topology.links?.length || 0;
-    if (tsnCountEl) tsnCountEl.textContent = tsnCount;
 }
 
 // Interface Selection
@@ -1491,12 +1488,12 @@ function formatBytes(bytes) {
 
 // Polling
 function startPolling() {
-    // Refresh topology periodically if auto-refresh is enabled
+    // Refresh topology periodically if auto-refresh is enabled (throttled to 15s)
     setInterval(() => {
         if (document.getElementById('auto-refresh').checked && state.isCapturing) {
             refreshTopology();
         }
-    }, 5000);
+    }, 15000);
 
     // Update charts periodically
     setInterval(updateAllCharts, 3000);
@@ -1629,6 +1626,7 @@ function navigatePacket(direction) {
 // Global functions for onclick handlers
 window.filterByHost = filterByHost;
 window.selectInterface = selectInterface;
+window.selectHost = selectHost;
 
 // ============================================
 // Tester Functions
