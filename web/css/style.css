@@ -1449,9 +1449,147 @@ body {
     display: none;
 }
 
+/* Column Resize Handle */
+.packet-list th.resizable {
+    position: relative;
+    user-select: none;
+}
+
+.resize-handle {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 5px;
+    height: 100%;
+    cursor: col-resize;
+    background: transparent;
+    transition: background 0.2s;
+}
+
+.resize-handle:hover,
+.resize-handle.active {
+    background: var(--accent-primary);
+}
+
+.packet-list th.resizing {
+    background: var(--bg-tertiary);
+}
+
+body.col-resizing {
+    cursor: col-resize !important;
+    user-select: none;
+}
+
+body.col-resizing * {
+    cursor: col-resize !important;
+}
+
+/* Test Layout for Latency/Throughput */
+.test-layout {
+    display: flex;
+    gap: 20px;
+    height: 100%;
+    min-height: 0;
+}
+
+.test-controls {
+    width: 320px;
+    flex-shrink: 0;
+    background: var(--bg-card);
+    border-radius: 16px;
+    padding: 20px;
+    border: 1px solid var(--border-light);
+    display: flex;
+    flex-direction: column;
+}
+
+.test-controls h4 {
+    font-size: 1em;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.test-controls h4 svg {
+    color: var(--accent-primary);
+}
+
+.test-stats {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-top: auto;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-light);
+}
+
+.stat-box {
+    background: var(--bg-tertiary);
+    border-radius: 10px;
+    padding: 14px;
+    text-align: center;
+}
+
+.stat-box .stat-value {
+    font-size: 1.3em;
+    font-weight: 600;
+    color: var(--accent-primary);
+    font-family: 'SF Mono', Menlo, monospace;
+}
+
+.stat-box .stat-label {
+    font-size: 0.75em;
+    color: var(--text-tertiary);
+    margin-top: 4px;
+    text-transform: uppercase;
+}
+
+.test-chart-area {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.chart-card.full-height {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.chart-wrapper-large {
+    flex: 1;
+    position: relative;
+    min-height: 300px;
+}
+
+.chart-wrapper-large canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.btn-full {
+    width: 100%;
+    justify-content: center;
+}
+
 /* Responsive */
 @media (max-width: 1200px) {
     .stats-grid-2x2 {
         grid-template-columns: 1fr;
+    }
+
+    .test-layout {
+        flex-direction: column;
+    }
+
+    .test-controls {
+        width: 100%;
     }
 }

@@ -34,6 +34,8 @@ const state = {
 document.addEventListener('DOMContentLoaded', () => {
     initializeUI();
     initializeCharts();
+    initializeTestCharts();
+    initializeColumnResize();
     loadStatus();
     setupEventListeners();
     startPolling();
@@ -61,6 +63,16 @@ function initializeUI() {
                 if (!state.selectedPacket) {
                     document.getElementById('detail-placeholder').style.display = 'flex';
                     document.getElementById('detail-content').style.display = 'none';
+                }
+            } else if (tab.dataset.tab === 'latency') {
+                // Resize chart when tab becomes visible
+                if (state.charts.latency) {
+                    setTimeout(() => state.charts.latency.resize(), 100);
+                }
+            } else if (tab.dataset.tab === 'throughput') {
+                // Resize chart when tab becomes visible
+                if (state.charts.throughput) {
+                    setTimeout(() => state.charts.throughput.resize(), 100);
                 }
             }
         });
@@ -247,7 +259,10 @@ function stopPacketStream() {
     }
 }
 
-// Packet Processing
+// Packet Processing - Batch processing for better performance
+let pendingPackets = [];
+let updateScheduled = false;
+
 function processPacket(packet, live = true) {
     // Add to packet list
     state.packets.push(packet);
@@ -270,30 +285,81 @@ function processPacket(packet, live = true) {
     }
 
     if (live) {
-        // Apply filter and update pagination
+        // Batch packet updates for performance
         if (matchesFilter(packet, state.filter)) {
-            state.filteredPackets.push(packet);
-
-            // Update pagination state
-            const newTotalPages = Math.max(1, Math.ceil(state.filteredPackets.length / state.pageSize));
-
-            // If on last page, append the new packet row
-            if (state.currentPage === state.totalPages) {
-                // Check if we need to move to new page
-                const currentPagePackets = state.filteredPackets.length - (state.currentPage - 1) * state.pageSize;
-                if (currentPagePackets <= state.pageSize) {
-                    appendPacketRow(packet, true);
-                } else {
-                    // Page is full, update total pages
-                    state.totalPages = newTotalPages;
-                }
-            }
-
-            state.totalPages = newTotalPages;
-            updatePaginationUI();
+            pendingPackets.push(packet);
         }
-        updateCounters();
+
+        // Schedule batch update
+        if (!updateScheduled) {
+            updateScheduled = true;
+            requestAnimationFrame(flushPendingPackets);
+        }
     }
+}
+
+function flushPendingPackets() {
+    updateScheduled = false;
+    if (pendingPackets.length === 0) return;
+
+    // Process all pending packets
+    const packetsToAdd = pendingPackets;
+    pendingPackets = [];
+
+    packetsToAdd.forEach(packet => {
+        state.filteredPackets.push(packet);
+    });
+
+    // Update pagination state
+    const newTotalPages = Math.max(1, Math.ceil(state.filteredPackets.length / state.pageSize));
+
+    // If on last page, append new packet rows
+    if (state.currentPage === state.totalPages) {
+        const tbody = document.getElementById('packet-tbody');
+        const fragment = document.createDocumentFragment();
+
+        packetsToAdd.forEach(packet => {
+            const currentPagePackets = state.filteredPackets.length - (state.currentPage - 1) * state.pageSize;
+            if (currentPagePackets <= state.pageSize) {
+                const row = createPacketRow(packet);
+                fragment.appendChild(row);
+            }
+        });
+
+        tbody.appendChild(fragment);
+
+        // Auto-scroll
+        if (state.autoScroll) {
+            const packetList = document.querySelector('.packet-list');
+            packetList.scrollTop = packetList.scrollHeight;
+        }
+    }
+
+    state.totalPages = newTotalPages;
+    updatePaginationUI();
+    updateCounters();
+}
+
+function createPacketRow(packet) {
+    const row = document.createElement('tr');
+    row.className = getProtocolClass(packet);
+    row.dataset.id = packet.id;
+    row.onclick = () => selectPacket(packet);
+
+    const time = formatTime(packet.timestamp);
+    const info = getPacketInfo(packet);
+
+    row.innerHTML = `
+        <td>${packet.id}</td>
+        <td>${time}</td>
+        <td>${packet.info.src_ip || packet.info.src_mac}</td>
+        <td>${packet.info.dst_ip || packet.info.dst_mac}</td>
+        <td><span class="proto-badge proto-${(packet.info.protocol || packet.info.ethertype_name || '').toLowerCase()}">${packet.info.protocol || packet.info.ethertype_name || '-'}</span></td>
+        <td>${packet.length}</td>
+        <td class="info-cell">${info}</td>
+    `;
+
+    return row;
 }
 
 function updateHostInfo(packet) {
@@ -374,7 +440,7 @@ function updateCounters() {
     document.getElementById('byte-count').textContent = formatBytes(state.stats.bytes_captured);
 }
 
-// Packet List Rendering
+// Packet List Rendering - Optimized with document fragments
 function renderPacketList() {
     const tbody = document.getElementById('packet-tbody');
     tbody.innerHTML = '';
@@ -397,7 +463,13 @@ function renderPacketList() {
     const endIdx = startIdx + state.pageSize;
     const displayPackets = state.filteredPackets.slice(startIdx, endIdx);
 
-    displayPackets.forEach(packet => appendPacketRow(packet, false));
+    // Use document fragment for batch DOM update
+    const fragment = document.createDocumentFragment();
+    displayPackets.forEach(packet => {
+        const row = createPacketRow(packet);
+        fragment.appendChild(row);
+    });
+    tbody.appendChild(fragment);
 
     // Update pagination UI
     updatePaginationUI();
@@ -424,28 +496,10 @@ function updatePaginationUI() {
     document.getElementById('btn-last-page').disabled = state.currentPage >= state.totalPages;
 }
 
+// appendPacketRow - now uses createPacketRow for consistency
 function appendPacketRow(packet, live = false) {
     const tbody = document.getElementById('packet-tbody');
-    const row = document.createElement('tr');
-
-    // Protocol-based coloring
-    row.className = getProtocolClass(packet);
-    row.dataset.id = packet.id;
-    row.onclick = () => selectPacket(packet);
-
-    const time = formatTime(packet.timestamp);
-    const info = getPacketInfo(packet);
-
-    row.innerHTML = `
-        <td>${packet.id}</td>
-        <td>${time}</td>
-        <td>${packet.info.src_ip || packet.info.src_mac}</td>
-        <td>${packet.info.dst_ip || packet.info.dst_mac}</td>
-        <td><span class="proto-badge proto-${(packet.info.protocol || packet.info.ethertype_name || '').toLowerCase()}">${packet.info.protocol || packet.info.ethertype_name || '-'}</span></td>
-        <td>${packet.length}</td>
-        <td class="info-cell">${info}</td>
-    `;
-
+    const row = createPacketRow(packet);
     tbody.appendChild(row);
 
     // Auto-scroll only for live packets on last page
@@ -1536,6 +1590,12 @@ document.addEventListener('keydown', (e) => {
         case '4':
             switchTab('detail');
             break;
+        case '5':
+            switchTab('latency');
+            break;
+        case '6':
+            switchTab('throughput');
+            break;
         case 'ArrowUp':  // Navigate packets
             e.preventDefault();
             navigatePacket(-1);
@@ -1591,6 +1651,14 @@ function switchTab(tabName) {
         updateAllCharts();
     } else if (tabName === 'hosts') {
         renderHostsList();
+    } else if (tabName === 'latency') {
+        if (state.charts.latency) {
+            setTimeout(() => state.charts.latency.resize(), 100);
+        }
+    } else if (tabName === 'throughput') {
+        if (state.charts.throughput) {
+            setTimeout(() => state.charts.throughput.resize(), 100);
+        }
     }
 }
 
@@ -1627,6 +1695,167 @@ function navigatePacket(direction) {
 window.filterByHost = filterByHost;
 window.selectInterface = selectInterface;
 window.selectHost = selectHost;
+
+// ============================================
+// Column Resize Functionality
+// ============================================
+
+function initializeColumnResize() {
+    const table = document.getElementById('packet-table');
+    if (!table) return;
+
+    const headers = table.querySelectorAll('th.resizable');
+    let isResizing = false;
+    let currentTh = null;
+    let startX = 0;
+    let startWidth = 0;
+
+    // Load saved column widths
+    const savedWidths = localStorage.getItem('columnWidths');
+    if (savedWidths) {
+        try {
+            const widths = JSON.parse(savedWidths);
+            headers.forEach((th, index) => {
+                if (widths[index]) {
+                    th.style.width = widths[index] + 'px';
+                }
+            });
+        } catch (e) {
+            console.warn('Failed to load column widths');
+        }
+    }
+
+    headers.forEach(th => {
+        const handle = th.querySelector('.resize-handle');
+        if (!handle) return;
+
+        handle.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            currentTh = th;
+            startX = e.pageX;
+            startWidth = th.offsetWidth;
+            th.classList.add('resizing');
+            handle.classList.add('active');
+            document.body.classList.add('col-resizing');
+            e.preventDefault();
+        });
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+        const diff = e.pageX - startX;
+        const newWidth = Math.max(40, startWidth + diff);
+        currentTh.style.width = newWidth + 'px';
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (!isResizing) return;
+        isResizing = false;
+        if (currentTh) {
+            currentTh.classList.remove('resizing');
+            const handle = currentTh.querySelector('.resize-handle');
+            if (handle) handle.classList.remove('active');
+        }
+        document.body.classList.remove('col-resizing');
+
+        // Save column widths
+        const widths = [];
+        headers.forEach(th => {
+            widths.push(th.offsetWidth);
+        });
+        localStorage.setItem('columnWidths', JSON.stringify(widths));
+
+        currentTh = null;
+    });
+}
+
+// ============================================
+// Test Charts (Latency & Throughput)
+// ============================================
+
+function initializeTestCharts() {
+    const chartOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 300 },
+        plugins: {
+            legend: {
+                labels: { color: '#e6edf3', font: { size: 11 } }
+            }
+        },
+        scales: {
+            x: {
+                grid: { color: '#30363d' },
+                ticks: { color: '#8b949e' }
+            },
+            y: {
+                grid: { color: '#30363d' },
+                ticks: { color: '#8b949e' },
+                beginAtZero: true
+            }
+        }
+    };
+
+    // Latency Chart
+    const latencyCtx = document.getElementById('latency-chart');
+    if (latencyCtx) {
+        state.charts.latency = new Chart(latencyCtx.getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'RTT (ms)',
+                    data: [],
+                    borderColor: '#0a84ff',
+                    backgroundColor: 'rgba(10, 132, 255, 0.1)',
+                    tension: 0.3,
+                    fill: true,
+                    pointRadius: 4,
+                    pointHoverRadius: 6
+                }]
+            },
+            options: {
+                ...chartOptions,
+                plugins: {
+                    ...chartOptions.plugins,
+                    title: {
+                        display: false
+                    }
+                }
+            }
+        });
+    }
+
+    // Throughput Chart
+    const throughputCtx = document.getElementById('throughput-chart');
+    if (throughputCtx) {
+        state.charts.throughput = new Chart(throughputCtx.getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Mbps',
+                    data: [],
+                    borderColor: '#30d158',
+                    backgroundColor: 'rgba(48, 209, 88, 0.1)',
+                    tension: 0.3,
+                    fill: true,
+                    pointRadius: 4,
+                    pointHoverRadius: 6
+                }]
+            },
+            options: {
+                ...chartOptions,
+                plugins: {
+                    ...chartOptions.plugins,
+                    title: {
+                        display: false
+                    }
+                }
+            }
+        });
+    }
+}
 
 // ============================================
 // Tester Functions
@@ -1671,49 +1900,30 @@ async function startPingTest() {
 }
 
 function renderPingResults(data) {
-    const resultsEl = document.getElementById('ping-results');
-
     if (!data || !data.results) {
-        resultsEl.innerHTML = '<div class="result-line result-error">No results</div>';
+        showNotification('No results received', 'error');
         return;
     }
 
-    let html = '';
-
-    // Individual results
-    data.results.forEach((r, i) => {
-        if (r.success) {
-            html += `<div class="result-line result-success">seq=${i+1} time=${r.rtt_ms.toFixed(2)}ms ttl=${r.ttl || '-'}</div>`;
-        } else {
-            html += `<div class="result-line result-error">seq=${i+1} timeout</div>`;
-        }
-    });
-
-    // Statistics
+    // Update stat boxes
     if (data.stats) {
-        html += `
-            <div class="result-stats">
-                <div class="result-stat">
-                    <div class="result-stat-value">${data.stats.min_ms?.toFixed(2) || '-'}</div>
-                    <div class="result-stat-label">Min (ms)</div>
-                </div>
-                <div class="result-stat">
-                    <div class="result-stat-value">${data.stats.avg_ms?.toFixed(2) || '-'}</div>
-                    <div class="result-stat-label">Avg (ms)</div>
-                </div>
-                <div class="result-stat">
-                    <div class="result-stat-value">${data.stats.max_ms?.toFixed(2) || '-'}</div>
-                    <div class="result-stat-label">Max (ms)</div>
-                </div>
-                <div class="result-stat">
-                    <div class="result-stat-value">${data.stats.loss_percent?.toFixed(1) || '0'}%</div>
-                    <div class="result-stat-label">Loss</div>
-                </div>
-            </div>
-        `;
+        document.getElementById('ping-min').textContent = data.stats.min_ms?.toFixed(2) || '-';
+        document.getElementById('ping-avg').textContent = data.stats.avg_ms?.toFixed(2) || '-';
+        document.getElementById('ping-max').textContent = data.stats.max_ms?.toFixed(2) || '-';
+        document.getElementById('ping-loss').textContent = (data.stats.loss_percent?.toFixed(1) || '0') + '%';
     }
 
-    resultsEl.innerHTML = html;
+    // Update chart
+    if (state.charts.latency) {
+        const labels = data.results.map((_, i) => `#${i + 1}`);
+        const values = data.results.map(r => r.success ? r.rtt_ms : null);
+
+        state.charts.latency.data.labels = labels;
+        state.charts.latency.data.datasets[0].data = values;
+        state.charts.latency.update();
+    }
+
+    showNotification(`Ping complete: ${data.results.filter(r => r.success).length}/${data.results.length} successful`, 'success');
 }
 
 // Throughput Test
@@ -1759,39 +1969,34 @@ async function startThroughputTest() {
 }
 
 function renderThroughputResults(data) {
-    const resultsEl = document.getElementById('throughput-results');
-
     if (!data) {
-        resultsEl.innerHTML = '<div class="result-line result-error">No results</div>';
+        showNotification('No results received', 'error');
         return;
     }
 
-    let html = `
-        <div class="result-stats">
-            <div class="result-stat">
-                <div class="result-stat-value">${formatBandwidth(data.bandwidth_bps)}</div>
-                <div class="result-stat-label">Throughput</div>
-            </div>
-            <div class="result-stat">
-                <div class="result-stat-value">${data.packets_sent || 0}</div>
-                <div class="result-stat-label">Packets TX</div>
-            </div>
-            <div class="result-stat">
-                <div class="result-stat-value">${data.packets_received || 0}</div>
-                <div class="result-stat-label">Packets RX</div>
-            </div>
-            <div class="result-stat">
-                <div class="result-stat-value">${data.loss_percent?.toFixed(2) || '0'}%</div>
-                <div class="result-stat-label">Loss</div>
-            </div>
-        </div>
-    `;
+    // Update stat boxes
+    document.getElementById('tp-bandwidth').textContent = formatBandwidth(data.bandwidth_bps);
+    document.getElementById('tp-packets').textContent = (data.packets_sent || 0).toLocaleString();
+    document.getElementById('tp-jitter').textContent = data.jitter_ms?.toFixed(3) || '-';
+    document.getElementById('tp-loss').textContent = (data.loss_percent?.toFixed(2) || '0') + '%';
 
-    if (data.jitter_ms) {
-        html += `<div class="result-line">Jitter: ${data.jitter_ms.toFixed(3)} ms</div>`;
+    // Update chart with interval data if available
+    if (state.charts.throughput && data.intervals) {
+        const labels = data.intervals.map((_, i) => `${i + 1}s`);
+        const values = data.intervals.map(v => v.bandwidth_mbps || 0);
+
+        state.charts.throughput.data.labels = labels;
+        state.charts.throughput.data.datasets[0].data = values;
+        state.charts.throughput.update();
+    } else if (state.charts.throughput) {
+        // Single data point
+        const mbps = data.bandwidth_bps ? (data.bandwidth_bps / 1e6).toFixed(2) : 0;
+        state.charts.throughput.data.labels = ['Result'];
+        state.charts.throughput.data.datasets[0].data = [parseFloat(mbps)];
+        state.charts.throughput.update();
     }
 
-    resultsEl.innerHTML = html;
+    showNotification(`Throughput: ${formatBandwidth(data.bandwidth_bps)}`, 'success');
 }
 
 function formatBandwidth(bps) {
