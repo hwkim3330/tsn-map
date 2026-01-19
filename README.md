@@ -50,11 +50,14 @@ cd tsn-map
 # Build
 cargo build --release
 
-# Run (requires root for packet capture)
-sudo ./target/release/tsn-map -i eth0
+# Set capabilities (one-time, then no sudo needed)
+sudo setcap 'cap_net_raw,cap_net_admin+eip' ./target/release/tsn-map
 
-# Open browser
-xdg-open http://localhost:8080
+# Run (no sudo required after setcap)
+./target/release/tsn-map -i eth0
+
+# Or use the launcher script
+./start-web.sh
 ```
 
 ### Options

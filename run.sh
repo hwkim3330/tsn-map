@@ -14,11 +14,23 @@ echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}       TSN-Map Desktop Application${NC}"
 echo -e "${GREEN}========================================${NC}"
 
-# Check if running as root (needed for packet capture)
-if [ "$EUID" -ne 0 ]; then
-    echo -e "${YELLOW}Note: Running without root. Packet capture may not work.${NC}"
-    echo -e "${YELLOW}To enable packet capture, run: sudo ./run.sh${NC}"
-fi
+# Set up capabilities so we don't need root
+setup_capabilities() {
+    local binary="$1"
+    if [ -f "$binary" ]; then
+        if ! getcap "$binary" 2>/dev/null | grep -q cap_net_raw; then
+            echo -e "${YELLOW}Setting network capabilities (one-time sudo required)...${NC}"
+            if command -v pkexec &> /dev/null; then
+                pkexec setcap 'cap_net_raw,cap_net_admin+eip' "$binary"
+            else
+                sudo setcap 'cap_net_raw,cap_net_admin+eip' "$binary"
+            fi
+        fi
+    fi
+}
+
+# Kill any existing instance
+pkill -f "tsn-map.*-p 8080" 2>/dev/null
 
 # Auto-detect network interface
 detect_interface() {
@@ -47,6 +59,9 @@ if [ ! -f target/release/tsn-map ] || [ Cargo.toml -nt target/release/tsn-map ];
     echo -e "${YELLOW}Building backend...${NC}"
     cargo build --release 2>&1 | tail -5
 fi
+
+# Set up capabilities for packet capture without root
+setup_capabilities "$(pwd)/target/release/tsn-map"
 
 # Check if Tauri app exists
 if [ ! -f src-tauri/target/release/tsn-map-app ]; then
