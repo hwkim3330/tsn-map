@@ -351,8 +351,8 @@ body {
 }
 
 .packet-list table {
-    width: max-content;
-    min-width: 100%;
+    width: 100%;
+    table-layout: fixed;
     border-collapse: collapse;
     font-size: 0.82em;
     font-family: 'SF Mono', Menlo, monospace;
@@ -382,21 +382,7 @@ body {
     text-overflow: ellipsis;
 }
 
-/* Column widths */
-.packet-list th:nth-child(1),
-.packet-list td:nth-child(1) { width: 55px; min-width: 55px; max-width: 55px; }   /* No. */
-.packet-list th:nth-child(2),
-.packet-list td:nth-child(2) { width: 75px; min-width: 75px; max-width: 75px; }   /* Time */
-.packet-list th:nth-child(3),
-.packet-list td:nth-child(3) { width: 150px; min-width: 150px; max-width: 150px; } /* Source */
-.packet-list th:nth-child(4),
-.packet-list td:nth-child(4) { width: 150px; min-width: 150px; max-width: 150px; } /* Destination */
-.packet-list th:nth-child(5),
-.packet-list td:nth-child(5) { width: 75px; min-width: 75px; max-width: 75px; }   /* Protocol */
-.packet-list th:nth-child(6),
-.packet-list td:nth-child(6) { width: 55px; min-width: 55px; max-width: 55px; }   /* Length */
-.packet-list th:nth-child(7),
-.packet-list td:nth-child(7) { width: auto; min-width: 200px; }                    /* Info */
+/* Column widths controlled by colgroup in HTML */
 
 .packet-list tr {
     cursor: pointer;

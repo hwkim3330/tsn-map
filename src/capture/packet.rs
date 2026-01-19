@@ -223,6 +223,9 @@ impl CapturedPacket {
             0x22EA => "SRP".to_string(),           // Stream Reservation Protocol
             0x2000 => "CDP".to_string(),           // Cisco Discovery Protocol
             0x2004 => "CGMP".to_string(),          // Cisco Group Management Protocol
+            0x887B => "HomePlug".to_string(),      // HomePlug GP
+            0x887E => "MVRP".to_string(),          // Multiple VLAN Registration Protocol (802.1ak)
+            0x8880 => "MRP".to_string(),           // Multiple Registration Protocol
             _ => format!("0x{:04X}", ethertype),
         };
 

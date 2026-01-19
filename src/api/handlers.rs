@@ -877,6 +877,132 @@ pub async fn throughput_stream(
 }
 
 // ============================================
+// Packet Generator (Simple UDP send)
+// ============================================
+
+#[derive(Deserialize)]
+pub struct PktgenStreamParams {
+    pub target: String,
+    pub port: Option<u16>,
+    pub duration: Option<u32>,
+    pub pkt_size: Option<u32>,
+    pub pps: Option<u32>,
+}
+
+pub async fn pktgen_stream(
+    Query(params): Query<PktgenStreamParams>,
+) -> Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>> {
+    use async_stream::stream;
+    use tokio::time::{sleep, Duration, Instant};
+    use std::net::{IpAddr, SocketAddr, UdpSocket};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU64, AtomicBool, Ordering};
+
+    let port = params.port.unwrap_or(5001);
+    let duration = params.duration.unwrap_or(10).min(60) as u64;
+    let pkt_size = params.pkt_size.unwrap_or(1024).min(1500).max(64) as usize;
+    let target_pps = params.pps.unwrap_or(1000).min(100000) as u64;
+
+    // Parse target IP
+    let target_addr: Option<SocketAddr> = params.target.parse::<IpAddr>()
+        .ok()
+        .map(|ip| SocketAddr::new(ip, port));
+
+    let stream = stream! {
+        let Some(target) = target_addr else {
+            yield Ok(Event::default().event("error").data("Invalid target IP address"));
+            return;
+        };
+
+        // Create socket
+        let socket = match UdpSocket::bind("0.0.0.0:0") {
+            Ok(s) => Arc::new(s),
+            Err(e) => {
+                yield Ok(Event::default().event("error").data(format!("Socket error: {}", e)));
+                return;
+            }
+        };
+        let _ = socket.set_write_timeout(Some(std::time::Duration::from_millis(100)));
+
+        let bytes_sent = Arc::new(AtomicU64::new(0));
+        let packets_sent = Arc::new(AtomicU64::new(0));
+        let running = Arc::new(AtomicBool::new(true));
+
+        // Spawn sender thread
+        let sender_socket = socket.clone();
+        let sender_bytes = bytes_sent.clone();
+        let sender_packets = packets_sent.clone();
+        let sender_running = running.clone();
+
+        let sender_handle = std::thread::spawn(move || {
+            let mut packet_buf = vec![0u8; pkt_size];
+            // Fill with sequence number and pattern
+            for i in 0..pkt_size {
+                packet_buf[i] = (i & 0xFF) as u8;
+            }
+
+            // Calculate delay between packets for target PPS
+            let packet_delay = if target_pps > 0 {
+                std::time::Duration::from_secs_f64(1.0 / target_pps as f64)
+            } else {
+                std::time::Duration::from_micros(100)
+            };
+
+            let mut seq: u32 = 0;
+            while sender_running.load(Ordering::Relaxed) {
+                // Put sequence number in first 4 bytes
+                packet_buf[0..4].copy_from_slice(&seq.to_be_bytes());
+                seq = seq.wrapping_add(1);
+
+                if sender_socket.send_to(&packet_buf, target).is_ok() {
+                    sender_bytes.fetch_add(pkt_size as u64, Ordering::Relaxed);
+                    sender_packets.fetch_add(1, Ordering::Relaxed);
+                }
+
+                if !packet_delay.is_zero() {
+                    std::thread::sleep(packet_delay);
+                }
+            }
+        });
+
+        let start = Instant::now();
+
+        // Stream updates every second
+        for _sec in 1..=duration {
+            sleep(Duration::from_secs(1)).await;
+
+            let current_bytes = bytes_sent.load(Ordering::Relaxed);
+            let current_packets = packets_sent.load(Ordering::Relaxed);
+            let elapsed = start.elapsed().as_secs_f64();
+
+            let data = serde_json::json!({
+                "packets_sent": current_packets,
+                "bytes_sent": current_bytes,
+                "elapsed_secs": elapsed,
+            });
+            yield Ok(Event::default().event("progress").data(data.to_string()));
+        }
+
+        // Stop sender
+        running.store(false, Ordering::Relaxed);
+        let _ = sender_handle.join();
+
+        let total_bytes = bytes_sent.load(Ordering::Relaxed);
+        let total_packets = packets_sent.load(Ordering::Relaxed);
+        let elapsed = start.elapsed().as_secs_f64();
+
+        let final_data = serde_json::json!({
+            "packets_sent": total_packets,
+            "bytes_sent": total_bytes,
+            "elapsed_secs": elapsed,
+        });
+        yield Ok(Event::default().event("complete").data(final_data.to_string()));
+    };
+
+    Sse::new(stream)
+}
+
+// ============================================
 // TSN Configuration Endpoints
 // ============================================
 

@@ -1785,8 +1785,10 @@ function initializeColumnResize() {
     if (!table) return;
 
     const headers = table.querySelectorAll('th.resizable');
+    const cols = table.querySelectorAll('colgroup col');
     let isResizing = false;
     let currentTh = null;
+    let currentColIndex = -1;
     let startX = 0;
     let startWidth = 0;
 
@@ -1796,8 +1798,8 @@ function initializeColumnResize() {
         try {
             const widths = JSON.parse(savedWidths);
             headers.forEach((th, index) => {
-                if (widths[index]) {
-                    th.style.width = widths[index] + 'px';
+                if (widths[index] && cols[index]) {
+                    cols[index].style.width = widths[index] + 'px';
                 }
             });
         } catch (e) {
@@ -1805,13 +1807,14 @@ function initializeColumnResize() {
         }
     }
 
-    headers.forEach(th => {
+    headers.forEach((th, index) => {
         const handle = th.querySelector('.resize-handle');
         if (!handle) return;
 
         handle.addEventListener('mousedown', (e) => {
             isResizing = true;
             currentTh = th;
+            currentColIndex = index;
             startX = e.pageX;
             startWidth = th.offsetWidth;
             th.classList.add('resizing');
@@ -1822,10 +1825,13 @@ function initializeColumnResize() {
     });
 
     document.addEventListener('mousemove', (e) => {
-        if (!isResizing) return;
+        if (!isResizing || currentColIndex < 0) return;
         const diff = e.pageX - startX;
         const newWidth = Math.max(40, startWidth + diff);
-        currentTh.style.width = newWidth + 'px';
+        // Update colgroup col width (this controls actual column width)
+        if (cols[currentColIndex]) {
+            cols[currentColIndex].style.width = newWidth + 'px';
+        }
     });
 
     document.addEventListener('mouseup', () => {
@@ -1838,14 +1844,17 @@ function initializeColumnResize() {
         }
         document.body.classList.remove('col-resizing');
 
-        // Save column widths
+        // Save column widths from colgroup
         const widths = [];
-        headers.forEach(th => {
-            widths.push(th.offsetWidth);
+        cols.forEach((col, i) => {
+            if (i < 6) { // Only save resizable columns
+                widths.push(col.offsetWidth || parseInt(col.style.width) || 100);
+            }
         });
         localStorage.setItem('columnWidths', JSON.stringify(widths));
 
         currentTh = null;
+        currentColIndex = -1;
     });
 }
 
@@ -2046,26 +2055,28 @@ function renderPingResults(data) {
     showNotification(`Ping complete: ${data.results.filter(r => r.success).length}/${data.results.length} successful`, 'success');
 }
 
-// Throughput Test with real-time SSE streaming
+// Packet Generator - Simple UDP packet transmission
 async function startThroughputTest() {
     const target = document.getElementById('throughput-target').value.trim();
     const duration = parseInt(document.getElementById('throughput-duration').value) || 10;
-    const bandwidth = parseInt(document.getElementById('throughput-bandwidth').value) || 100;
+    const pktSize = parseInt(document.getElementById('throughput-pktsize').value) || 1024;
+    const pps = parseInt(document.getElementById('throughput-pps').value) || 1000;
+    const port = parseInt(document.getElementById('throughput-port').value) || 5001;
 
     if (!target) {
-        showNotification('Please enter a target host', 'error');
+        showNotification('Please enter a target IP', 'error');
         return;
     }
 
     const btn = document.getElementById('btn-throughput-start');
     btn.disabled = true;
-    btn.innerHTML = '<span class="btn-spinner"></span> Testing...';
+    btn.innerHTML = '<span class="btn-spinner"></span> Sending...';
 
     // Reset stats and chart
     document.getElementById('tp-bandwidth').textContent = '...';
-    document.getElementById('tp-packets').textContent = '...';
-    document.getElementById('tp-jitter').textContent = '-';
-    document.getElementById('tp-loss').textContent = '-';
+    document.getElementById('tp-packets').textContent = '0';
+    document.getElementById('tp-pps').textContent = '0';
+    document.getElementById('tp-bytes').textContent = '0';
 
     // Initialize chart with empty data
     if (state.charts.throughput) {
@@ -2076,20 +2087,25 @@ async function startThroughputTest() {
 
     try {
         // Use SSE for real-time updates
-        const url = `/api/test/throughput/stream?target=${encodeURIComponent(target)}&duration=${duration}&bandwidth=${bandwidth}`;
+        const url = `/api/test/pktgen/stream?target=${encodeURIComponent(target)}&port=${port}&duration=${duration}&pkt_size=${pktSize}&pps=${pps}`;
         const eventSource = new EventSource(url);
 
-        eventSource.addEventListener('throughput', (e) => {
+        eventSource.addEventListener('progress', (e) => {
             const data = JSON.parse(e.data);
 
             // Update live stats
-            document.getElementById('tp-bandwidth').textContent = data.bandwidth_mbps.toFixed(2) + ' Mbps';
-            document.getElementById('tp-packets').textContent = data.total_packets.toLocaleString();
+            const mbps = (data.bytes_sent * 8 / data.elapsed_secs / 1000000).toFixed(2);
+            const currentPps = Math.round(data.packets_sent / data.elapsed_secs);
+
+            document.getElementById('tp-bandwidth').textContent = mbps + ' Mbps';
+            document.getElementById('tp-packets').textContent = data.packets_sent.toLocaleString();
+            document.getElementById('tp-pps').textContent = currentPps.toLocaleString();
+            document.getElementById('tp-bytes').textContent = formatBytes(data.bytes_sent);
 
             // Update chart in real-time
             if (state.charts.throughput) {
-                state.charts.throughput.data.labels.push(`${data.sec}s`);
-                state.charts.throughput.data.datasets[0].data.push(data.bandwidth_mbps);
+                state.charts.throughput.data.labels.push(`${Math.round(data.elapsed_secs)}s`);
+                state.charts.throughput.data.datasets[0].data.push(parseFloat(mbps));
                 state.charts.throughput.update('none');
             }
         });
@@ -2099,18 +2115,23 @@ async function startThroughputTest() {
             eventSource.close();
 
             // Update final stats
-            document.getElementById('tp-bandwidth').textContent = data.avg_bandwidth_mbps.toFixed(2) + ' Mbps';
-            document.getElementById('tp-packets').textContent = data.total_packets.toLocaleString();
+            const mbps = (data.bytes_sent * 8 / data.elapsed_secs / 1000000).toFixed(2);
+            const avgPps = Math.round(data.packets_sent / data.elapsed_secs);
+
+            document.getElementById('tp-bandwidth').textContent = mbps + ' Mbps';
+            document.getElementById('tp-packets').textContent = data.packets_sent.toLocaleString();
+            document.getElementById('tp-pps').textContent = avgPps.toLocaleString();
+            document.getElementById('tp-bytes').textContent = formatBytes(data.bytes_sent);
 
             btn.disabled = false;
-            btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Start Test';
-            showNotification(`Throughput: ${data.avg_bandwidth_mbps.toFixed(2)} Mbps`, 'success');
+            btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Start Packet Generation';
+            showNotification(`Sent ${data.packets_sent.toLocaleString()} packets (${mbps} Mbps)`, 'success');
         });
 
         eventSource.addEventListener('error', (e) => {
             eventSource.close();
             btn.disabled = false;
-            btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Start Test';
+            btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Start Packet Generation';
             if (e.data) {
                 showNotification(`Error: ${e.data}`, 'error');
             }
@@ -2120,22 +2141,22 @@ async function startThroughputTest() {
         eventSource.onerror = () => {
             eventSource.close();
             btn.disabled = false;
-            btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Start Test';
+            btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Start Packet Generation';
         };
 
     } catch (e) {
         showNotification(`Error: ${e.message}`, 'error');
         resetThroughputStats();
         btn.disabled = false;
-        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Start Test';
+        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Start Packet Generation';
     }
 }
 
 function resetThroughputStats() {
     document.getElementById('tp-bandwidth').textContent = '-';
     document.getElementById('tp-packets').textContent = '-';
-    document.getElementById('tp-jitter').textContent = '-';
-    document.getElementById('tp-loss').textContent = '-';
+    document.getElementById('tp-pps').textContent = '-';
+    document.getElementById('tp-bytes').textContent = '-';
 }
 
 function renderThroughputResults(data) {

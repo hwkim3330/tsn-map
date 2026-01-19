@@ -225,6 +225,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/test/ping/stream", get(api::handlers::ping_stream))
         .route("/api/test/throughput", post(api::handlers::throughput_test))
         .route("/api/test/throughput/stream", get(api::handlers::throughput_stream))
+        .route("/api/test/pktgen/stream", get(api::handlers::pktgen_stream))
         // TSN configuration
         .route("/api/tsn/cbs", post(api::handlers::configure_cbs))
         .route("/api/tsn/tas", post(api::handlers::configure_tas))
