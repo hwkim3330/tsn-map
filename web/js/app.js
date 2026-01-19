@@ -1131,55 +1131,78 @@ function formatTimeAgo(timestamp) {
 }
 
 // Topology
-let svg, simulation, zoom;
+let svg, simulation, zoom, topologyG;
+let nodePositions = {};  // Store node positions between updates
+let lastTopologyHash = '';  // Track changes
 
 async function refreshTopology() {
     const data = await apiCall('/api/topology');
     if (data && data.success) {
+        // Check if topology actually changed
+        const newHash = JSON.stringify(data.data.nodes.map(n => n.id).sort());
+        if (newHash === lastTopologyHash && state.topology.nodes.length > 0) {
+            // Just update stats, don't re-render
+            updateTopologyStats();
+            return;
+        }
+        lastTopologyHash = newHash;
         state.topology = data.data;
         renderTopology();
     }
 }
 
 function renderTopology() {
-    // Update sidebar stats
     updateTopologyStats();
 
     const container = document.getElementById('topology-graph');
-    container.innerHTML = '';
-
     const width = container.clientWidth || 600;
     const height = container.clientHeight || 400;
 
-    svg = d3.select('#topology-graph')
-        .append('svg')
-        .attr('width', width)
-        .attr('height', height);
-
-    // Add zoom behavior
-    zoom = d3.zoom()
-        .scaleExtent([0.1, 4])
-        .on('zoom', (event) => {
-            g.attr('transform', event.transform);
-        });
-
-    svg.call(zoom);
-
-    const g = svg.append('g');
-
-    // Limit nodes to top 50 by traffic for performance
+    // Limit nodes to top 30 for cleaner display
     let allNodes = state.topology.nodes.map(n => ({ ...n }));
     allNodes.sort((a, b) => (b.packets_sent + b.packets_received) - (a.packets_sent + a.packets_received));
-    const nodes = allNodes.slice(0, 50);
+    const nodes = allNodes.slice(0, 30);
     const nodeIds = new Set(nodes.map(n => n.id));
 
-    // Only include links between visible nodes
+    // Restore saved positions
+    nodes.forEach(n => {
+        if (nodePositions[n.id]) {
+            n.x = nodePositions[n.id].x;
+            n.y = nodePositions[n.id].y;
+            n.fx = nodePositions[n.id].fx;
+            n.fy = nodePositions[n.id].fy;
+        }
+    });
+
     const links = state.topology.links
         .filter(l => nodeIds.has(l.source) && nodeIds.has(l.target))
         .map(l => ({ ...l }));
 
+    // Initialize SVG only once
+    if (!svg || container.querySelector('svg') === null) {
+        container.innerHTML = '';
+        svg = d3.select('#topology-graph')
+            .append('svg')
+            .attr('width', width)
+            .attr('height', height);
+
+        zoom = d3.zoom()
+            .scaleExtent([0.1, 4])
+            .on('zoom', (event) => {
+                topologyG.attr('transform', event.transform);
+            });
+
+        svg.call(zoom);
+        topologyG = svg.append('g');
+    } else {
+        svg.attr('width', width).attr('height', height);
+    }
+
     if (nodes.length === 0) {
+        topologyG.selectAll('*').remove();
+        svg.selectAll('.empty-msg').remove();
         svg.append('text')
+            .attr('class', 'empty-msg')
             .attr('x', width / 2)
             .attr('y', height / 2)
             .attr('text-anchor', 'middle')
@@ -1188,60 +1211,84 @@ function renderTopology() {
         return;
     }
 
-    // Create simulation
+    svg.selectAll('.empty-msg').remove();
+
+    // Stop existing simulation
+    if (simulation) {
+        simulation.stop();
+    }
+
+    // Create simulation with lower alpha for smoother updates
+    const isUpdate = Object.keys(nodePositions).length > 0;
     simulation = d3.forceSimulation(nodes)
-        .force('link', d3.forceLink(links).id(d => d.id).distance(120))
-        .force('charge', d3.forceManyBody().strength(-400))
+        .force('link', d3.forceLink(links).id(d => d.id).distance(100))
+        .force('charge', d3.forceManyBody().strength(-300))
         .force('center', d3.forceCenter(width / 2, height / 2))
-        .force('collision', d3.forceCollide().radius(40));
+        .force('collision', d3.forceCollide().radius(35))
+        .alpha(isUpdate ? 0.1 : 0.8)  // Low alpha for updates
+        .alphaDecay(0.05);
 
-    // Draw links
-    const link = g.append('g')
-        .selectAll('line')
-        .data(links)
-        .join('line')
+    // Update links with enter/update/exit
+    const link = topologyG.selectAll('line.link')
+        .data(links, d => d.id);
+
+    link.exit().remove();
+
+    const linkEnter = link.enter()
+        .append('line')
+        .attr('class', 'link')
         .attr('stroke', '#58a6ff')
-        .attr('stroke-opacity', 0.6)
-        .attr('stroke-width', d => Math.min(Math.log(d.packets + 1) * 0.5 + 1, 4));
+        .attr('stroke-opacity', 0.5);
 
-    // Draw nodes
-    const node = g.append('g')
-        .selectAll('g')
-        .data(nodes)
-        .join('g')
-        .attr('class', 'topology-node')
+    link.merge(linkEnter)
+        .attr('stroke-width', d => Math.min(Math.log(d.packets + 1) * 0.5 + 1, 3));
+
+    // Update nodes with enter/update/exit
+    const node = topologyG.selectAll('g.node')
+        .data(nodes, d => d.id);
+
+    node.exit().remove();
+
+    const nodeEnter = node.enter()
+        .append('g')
+        .attr('class', 'node')
         .style('cursor', 'pointer')
         .call(d3.drag()
             .on('start', dragstarted)
             .on('drag', dragged)
             .on('end', dragended));
 
-    // Node circle
-    node.append('circle')
-        .attr('r', d => getNodeRadius(d))
-        .attr('fill', d => getNodeColor(d))
+    nodeEnter.append('circle')
         .attr('stroke', '#30363d')
         .attr('stroke-width', 2);
 
-    // Labels - show IP or MAC only
-    if (document.getElementById('show-labels').checked) {
-        node.append('text')
-            .attr('dx', d => getNodeRadius(d) + 5)
-            .attr('dy', 4)
-            .attr('fill', '#c9d1d9')
-            .attr('font-size', '11px')
-            .text(d => d.ip_addresses?.[0] || d.mac_address?.substring(0, 8) || d.id.substring(0, 8));
-    }
+    nodeEnter.append('text')
+        .attr('class', 'node-label')
+        .attr('dy', 4)
+        .attr('fill', '#c9d1d9')
+        .attr('font-size', '10px');
 
-    // Tooltip on hover
-    node.append('title')
+    nodeEnter.append('title');
+
+    // Update all nodes (enter + update)
+    const allNodes2 = node.merge(nodeEnter);
+
+    allNodes2.select('circle')
+        .attr('r', d => getNodeRadius(d))
+        .attr('fill', d => getNodeColor(d));
+
+    const showLabels = document.getElementById('show-labels').checked;
+    allNodes2.select('text.node-label')
+        .attr('dx', d => getNodeRadius(d) + 4)
+        .text(d => showLabels ? (d.ip_addresses?.[0] || d.mac_address?.substring(0, 8) || '') : '');
+
+    allNodes2.select('title')
         .text(d => {
             const ips = d.ip_addresses?.join(', ') || 'Unknown';
             return `IP: ${ips}\nMAC: ${d.mac_address || 'Unknown'}\nType: ${d.node_type || 'Unknown'}\nVendor: ${d.vendor || 'Unknown'}`;
         });
 
-    // Click to filter
-    node.on('click', function(event, d) {
+    allNodes2.on('click', function(event, d) {
         const ip = d.ip_addresses?.[0];
         if (ip) {
             filterByHost(ip);
@@ -1249,18 +1296,27 @@ function renderTopology() {
         }
     });
 
+    const allLinks = topologyG.selectAll('line.link');
+
     simulation.on('tick', () => {
-        link
+        allLinks
             .attr('x1', d => d.source.x)
             .attr('y1', d => d.source.y)
             .attr('x2', d => d.target.x)
             .attr('y2', d => d.target.y);
 
-        node.attr('transform', d => `translate(${d.x},${d.y})`);
+        allNodes2.attr('transform', d => `translate(${d.x},${d.y})`);
+    });
+
+    // Save positions when simulation ends
+    simulation.on('end', () => {
+        nodes.forEach(n => {
+            nodePositions[n.id] = { x: n.x, y: n.y, fx: n.fx, fy: n.fy };
+        });
     });
 
     function dragstarted(event) {
-        if (!event.active) simulation.alphaTarget(0.3).restart();
+        if (!event.active) simulation.alphaTarget(0.2).restart();
         event.subject.fx = event.subject.x;
         event.subject.fy = event.subject.y;
     }
@@ -1272,8 +1328,13 @@ function renderTopology() {
 
     function dragended(event) {
         if (!event.active) simulation.alphaTarget(0);
-        event.subject.fx = null;
-        event.subject.fy = null;
+        // Keep node fixed where user dropped it
+        nodePositions[event.subject.id] = {
+            x: event.subject.x,
+            y: event.subject.y,
+            fx: event.subject.x,
+            fy: event.subject.y
+        };
     }
 }
 
@@ -1315,6 +1376,8 @@ function getNodeRadius(node) {
 
 function setLayout(mode) {
     state.layoutMode = mode;
+    nodePositions = {};  // Clear positions for new layout
+    lastTopologyHash = '';  // Force re-render
     document.getElementById('btn-layout-force').classList.toggle('active', mode === 'force');
     document.getElementById('btn-layout-radial').classList.toggle('active', mode === 'radial');
     renderTopology();
@@ -1547,12 +1610,12 @@ function formatBytes(bytes) {
 
 // Polling
 function startPolling() {
-    // Refresh topology periodically if auto-refresh is enabled (throttled to 15s)
+    // Refresh topology periodically if auto-refresh is enabled (throttled to 30s)
     setInterval(() => {
         if (document.getElementById('auto-refresh').checked && state.isCapturing) {
             refreshTopology();
         }
-    }, 15000);
+    }, 30000);
 
     // Update charts periodically
     setInterval(updateAllCharts, 3000);
