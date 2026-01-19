@@ -1,17 +1,12 @@
 use std::collections::{HashMap, HashSet};
-use std::net::{IpAddr, Ipv4Addr};
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::net::IpAddr;
 use serde::{Serialize, Deserialize};
 use chrono::{DateTime, Utc};
 use petgraph::graph::{Graph, NodeIndex};
-use petgraph::Direction;
 use crate::capture::CapturedPacket;
 
 pub mod scanner;
 pub mod lldp;
-
-pub use scanner::TopologyScanner;
 
 /// Network node representing a device
 #[derive(Debug, Clone, Serialize, Deserialize)]

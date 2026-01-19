@@ -14,7 +14,7 @@ use pnet::packet::arp::{ArpHardwareTypes, ArpOperations, ArpPacket, MutableArpPa
 use pnet::packet::Packet;
 use pnet::util::MacAddr;
 
-use super::{NetworkNode, NodeType};
+// NetworkNode and NodeType available from super if needed
 
 /// Result of a network scan
 #[derive(Debug, Clone, Serialize, Deserialize)]

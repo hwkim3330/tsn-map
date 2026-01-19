@@ -1,8 +1,8 @@
 use std::fs::File;
 use std::io::{Write, Read, BufWriter};
 use std::path::Path;
-use chrono::{DateTime, Utc, TimeZone};
-use super::{CapturedPacket, PacketInfo};
+use chrono::{Utc, TimeZone};
+use super::CapturedPacket;
 
 const PCAP_MAGIC: u32 = 0xa1b2c3d4;
 const PCAP_VERSION_MAJOR: u16 = 2;

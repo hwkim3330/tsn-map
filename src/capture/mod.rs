@@ -1,7 +1,7 @@
 mod packet;
 mod pcap_handler;
 
-pub use packet::{CapturedPacket, PacketInfo, TsnInfo, TsnType, PtpInfo, CbsInfo};
+pub use packet::{CapturedPacket, TsnType, PtpInfo};
 pub use pcap_handler::PcapHandler;
 
 use std::collections::VecDeque;

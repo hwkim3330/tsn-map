@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
-use chrono::{DateTime, Utc};
 use crate::capture::CapturedPacket;
 
 /// FRER (Frame Replication and Elimination for Reliability) Stream Stats

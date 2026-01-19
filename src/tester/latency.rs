@@ -1,27 +1,27 @@
-//! Rust-based latency tester using raw sockets
-//! Inspired by https://github.com/tsnlab/tsn-sdk
+//! UDP-based application-layer latency tester
+//!
+//! Note: This measures application-layer RTT, NOT TSN/PHY-level latency.
+//! For TSN latency measurement, use HW timestamps (SO_TIMESTAMPING) or PTP PHC.
 
 use std::io::{self, ErrorKind};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
+use std::net::{IpAddr, SocketAddr, UdpSocket};
 use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 
-/// Packet header for latency measurement
-#[repr(C, packed)]
+/// Simple ping packet for RTT measurement
+/// Uses little-endian byte order for cross-platform compatibility
+#[repr(C)]
 #[derive(Clone, Copy)]
 struct LatencyPacket {
-    magic: u32,        // 0x4C415459 = "LATY"
-    seq: u32,          // Sequence number
+    magic: [u8; 4],    // "LATY" magic bytes
+    seq: u32,          // Sequence number (LE)
     op: u8,            // Operation: 0=ping, 1=pong
     _pad: [u8; 3],
-    tx_sec: u64,       // TX timestamp seconds
-    tx_nsec: u32,      // TX timestamp nanoseconds
-    rx_sec: u64,       // RX timestamp seconds (filled by receiver)
-    rx_nsec: u32,      // RX timestamp nanoseconds
 }
 
-const LATENCY_MAGIC: u32 = 0x4C415459;
+const LATENCY_MAGIC: [u8; 4] = *b"LATY";
 const LATENCY_PORT: u16 = 7878;
+const PACKET_SIZE: usize = std::mem::size_of::<LatencyPacket>();
 const OP_PING: u8 = 0;
 const OP_PONG: u8 = 1;
 
@@ -29,9 +29,7 @@ const OP_PONG: u8 = 1;
 pub struct LatencyResult {
     pub seq: u32,
     pub success: bool,
-    pub rtt_us: f64,      // Round-trip time in microseconds
-    pub tx_time: u64,     // TX timestamp (ns since epoch)
-    pub rx_time: u64,     // RX timestamp (ns since epoch)
+    pub rtt_us: f64,      // Round-trip time in microseconds (Instant-based)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,14 +39,13 @@ pub struct LatencyStats {
     pub min_us: f64,
     pub max_us: f64,
     pub avg_us: f64,
-    pub jitter_us: f64,   // Standard deviation
+    pub jitter_us: f64,   // Standard deviation (note: not RFC 3393 IPDV)
     pub loss_percent: f64,
 }
 
 pub struct LatencyTester {
     socket: UdpSocket,
     target: SocketAddr,
-    packet_size: usize,
 }
 
 impl LatencyTester {
@@ -57,16 +54,11 @@ impl LatencyTester {
         let port = port.unwrap_or(LATENCY_PORT);
         let target = SocketAddr::new(target_ip, port);
 
-        // Bind to any available port
         let socket = UdpSocket::bind("0.0.0.0:0")?;
         socket.set_read_timeout(Some(Duration::from_secs(2)))?;
         socket.set_write_timeout(Some(Duration::from_secs(1)))?;
 
-        Ok(Self {
-            socket,
-            target,
-            packet_size: std::mem::size_of::<LatencyPacket>(),
-        })
+        Ok(Self { socket, target })
     }
 
     /// Run latency test
@@ -89,89 +81,77 @@ impl LatencyTester {
     /// Send a single ping and wait for pong
     fn ping(&self, seq: u32) -> LatencyResult {
         let now = Instant::now();
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap();
 
-        // Create ping packet
+        // Create ping packet with explicit byte order
         let packet = LatencyPacket {
             magic: LATENCY_MAGIC,
-            seq,
+            seq: seq.to_le(),
             op: OP_PING,
             _pad: [0; 3],
-            tx_sec: timestamp.as_secs(),
-            tx_nsec: timestamp.subsec_nanos(),
-            rx_sec: 0,
-            rx_nsec: 0,
         };
 
-        // Send packet
-        let bytes = unsafe {
+        // Safe serialization
+        let bytes: &[u8] = unsafe {
             std::slice::from_raw_parts(
                 &packet as *const LatencyPacket as *const u8,
-                self.packet_size,
+                PACKET_SIZE,
             )
         };
 
-        if let Err(_) = self.socket.send_to(bytes, self.target) {
+        if self.socket.send_to(bytes, self.target).is_err() {
             return LatencyResult {
                 seq,
                 success: false,
                 rtt_us: 0.0,
-                tx_time: timestamp.as_nanos() as u64,
-                rx_time: 0,
             };
         }
 
-        // Wait for pong
-        let mut recv_buf = [0u8; 1024];
+        // Receive with exact buffer size
+        let mut recv_buf = [0u8; PACKET_SIZE];
         match self.socket.recv_from(&mut recv_buf) {
-            Ok((len, _addr)) => {
+            Ok((len, addr)) => {
+                // Verify source address
+                if addr != self.target {
+                    return LatencyResult {
+                        seq,
+                        success: false,
+                        rtt_us: 0.0,
+                    };
+                }
+
                 let rtt = now.elapsed();
 
-                if len >= self.packet_size {
-                    let recv_packet = unsafe {
-                        std::ptr::read(recv_buf.as_ptr() as *const LatencyPacket)
-                    };
+                if len >= PACKET_SIZE {
+                    // Parse with explicit byte order
+                    let recv_magic = &recv_buf[0..4];
+                    let recv_seq = u32::from_le_bytes([recv_buf[4], recv_buf[5], recv_buf[6], recv_buf[7]]);
+                    let recv_op = recv_buf[8];
 
-                    if recv_packet.magic == LATENCY_MAGIC && recv_packet.seq == seq && recv_packet.op == OP_PONG {
-                        let rx_time = std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap();
-
+                    if recv_magic == &LATENCY_MAGIC && recv_seq == seq && recv_op == OP_PONG {
                         return LatencyResult {
                             seq,
                             success: true,
                             rtt_us: rtt.as_secs_f64() * 1_000_000.0,
-                            tx_time: timestamp.as_nanos() as u64,
-                            rx_time: rx_time.as_nanos() as u64,
                         };
                     }
                 }
 
-                // Invalid response
                 LatencyResult {
                     seq,
                     success: false,
                     rtt_us: 0.0,
-                    tx_time: timestamp.as_nanos() as u64,
-                    rx_time: 0,
                 }
             }
-            Err(_) => {
-                // Timeout or error
-                LatencyResult {
-                    seq,
-                    success: false,
-                    rtt_us: 0.0,
-                    tx_time: timestamp.as_nanos() as u64,
-                    rx_time: 0,
-                }
-            }
+            Err(_) => LatencyResult {
+                seq,
+                success: false,
+                rtt_us: 0.0,
+            },
         }
     }
 
     /// Calculate statistics from results
+    /// Note: jitter is standard deviation, not RFC 3393 IPDV
     pub fn calculate_stats(results: &[LatencyResult]) -> LatencyStats {
         let success_results: Vec<_> = results.iter().filter(|r| r.success).collect();
         let count = results.len() as u32;
@@ -195,7 +175,7 @@ impl LatencyTester {
         let sum: f64 = rtts.iter().sum();
         let avg = sum / rtts.len() as f64;
 
-        // Calculate jitter (standard deviation)
+        // Standard deviation (not RFC 3393 IPDV)
         let variance: f64 = rtts.iter().map(|&x| (x - avg).powi(2)).sum::<f64>() / rtts.len() as f64;
         let jitter = variance.sqrt();
 
@@ -231,38 +211,25 @@ impl LatencyServer {
     pub fn run(&self, duration_secs: u64) -> io::Result<u64> {
         let start = Instant::now();
         let mut packets_handled = 0u64;
-        let packet_size = std::mem::size_of::<LatencyPacket>();
 
         loop {
             if duration_secs > 0 && start.elapsed().as_secs() >= duration_secs {
                 break;
             }
 
-            let mut recv_buf = [0u8; 1024];
+            let mut recv_buf = [0u8; PACKET_SIZE];
             match self.socket.recv_from(&mut recv_buf) {
                 Ok((len, src_addr)) => {
-                    if len >= packet_size {
-                        let mut packet = unsafe {
-                            std::ptr::read(recv_buf.as_ptr() as *const LatencyPacket)
-                        };
+                    if len >= PACKET_SIZE {
+                        let recv_magic = &recv_buf[0..4];
+                        let recv_op = recv_buf[8];
 
-                        if packet.magic == LATENCY_MAGIC && packet.op == OP_PING {
-                            // Fill RX timestamp
-                            let rx_time = std::time::SystemTime::now()
-                                .duration_since(std::time::UNIX_EPOCH)
-                                .unwrap();
-                            packet.rx_sec = rx_time.as_secs();
-                            packet.rx_nsec = rx_time.subsec_nanos();
-                            packet.op = OP_PONG;
+                        if recv_magic == &LATENCY_MAGIC && recv_op == OP_PING {
+                            // Create pong response
+                            let mut response = recv_buf;
+                            response[8] = OP_PONG;
 
-                            // Send pong
-                            let bytes = unsafe {
-                                std::slice::from_raw_parts(
-                                    &packet as *const LatencyPacket as *const u8,
-                                    packet_size,
-                                )
-                            };
-                            let _ = self.socket.send_to(bytes, src_addr);
+                            let _ = self.socket.send_to(&response, src_addr);
                             packets_handled += 1;
                         }
                     }
@@ -288,20 +255,11 @@ pub mod icmp {
     const ICMP_ECHO_REQUEST: u8 = 8;
     const ICMP_ECHO_REPLY: u8 = 0;
 
-    #[repr(C, packed)]
-    struct IcmpHeader {
-        icmp_type: u8,
-        code: u8,
-        checksum: u16,
-        id: u16,
-        seq: u16,
-    }
-
     fn checksum(data: &[u8]) -> u16 {
         let mut sum: u32 = 0;
         let mut i = 0;
 
-        while i < data.len() - 1 {
+        while i + 1 < data.len() {
             sum += ((data[i] as u32) << 8) | (data[i + 1] as u32);
             i += 2;
         }
@@ -333,28 +291,11 @@ pub mod icmp {
 
         // Build ICMP packet
         let mut packet = vec![0u8; 64];
-        let header = IcmpHeader {
-            icmp_type: ICMP_ECHO_REQUEST,
-            code: 0,
-            checksum: 0,
-            id: id.to_be(),
-            seq: seq.to_be(),
-        };
-
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                &header as *const IcmpHeader as *const u8,
-                packet.as_mut_ptr(),
-                std::mem::size_of::<IcmpHeader>(),
-            );
-        }
-
-        // Fill payload with timestamp
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_nanos() as u64;
-        packet[8..16].copy_from_slice(&timestamp.to_be_bytes());
+        // Type (1) + Code (1) + Checksum (2) + ID (2) + Seq (2) = 8 bytes header
+        packet[0] = ICMP_ECHO_REQUEST;
+        packet[1] = 0; // code
+        packet[4..6].copy_from_slice(&id.to_be_bytes());
+        packet[6..8].copy_from_slice(&seq.to_be_bytes());
 
         // Calculate checksum
         let cksum = checksum(&packet);
@@ -365,24 +306,33 @@ pub mod icmp {
 
         socket.send_to(&packet, &dest.into()).ok()?;
 
-        // Receive reply (socket2 0.5 requires MaybeUninit buffer)
+        // Receive reply
         let mut recv_buf: [MaybeUninit<u8>; 1024] = unsafe { MaybeUninit::uninit().assume_init() };
         match socket.recv(&mut recv_buf) {
             Ok(len) => {
-                if len >= 28 {
-                    // Convert MaybeUninit to slice safely
-                    let buf: &[u8] = unsafe {
-                        std::slice::from_raw_parts(recv_buf.as_ptr() as *const u8, len)
-                    };
-                    // IP header (20) + ICMP header (8)
-                    let icmp_type = buf[20];
-                    let recv_id = u16::from_be_bytes([buf[24], buf[25]]);
-                    let recv_seq = u16::from_be_bytes([buf[26], buf[27]]);
-
-                    if icmp_type == ICMP_ECHO_REPLY && recv_id == id && recv_seq == seq {
-                        return Some(start.elapsed().as_secs_f64() * 1000.0); // ms
-                    }
+                if len < 20 {
+                    return None;
                 }
+
+                let buf: &[u8] = unsafe {
+                    std::slice::from_raw_parts(recv_buf.as_ptr() as *const u8, len)
+                };
+
+                // Read IP header length (IHL) from first byte
+                let ihl = ((buf[0] & 0x0f) * 4) as usize;
+
+                if len < ihl + 8 {
+                    return None;
+                }
+
+                let icmp_type = buf[ihl];
+                let recv_id = u16::from_be_bytes([buf[ihl + 4], buf[ihl + 5]]);
+                let recv_seq = u16::from_be_bytes([buf[ihl + 6], buf[ihl + 7]]);
+
+                if icmp_type == ICMP_ECHO_REPLY && recv_id == id && recv_seq == seq {
+                    return Some(start.elapsed().as_secs_f64() * 1000.0); // ms
+                }
+
                 None
             }
             Err(_) => None,
@@ -394,25 +344,16 @@ pub mod icmp {
         let mut results = Vec::with_capacity(count as usize);
 
         for seq in 0..count {
-            let tx_time = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos() as u64;
-
             let result = match ping_icmp(target, seq as u16, 2000) {
                 Some(rtt_ms) => LatencyResult {
                     seq,
                     success: true,
                     rtt_us: rtt_ms * 1000.0,
-                    tx_time,
-                    rx_time: tx_time + (rtt_ms * 1_000_000.0) as u64,
                 },
                 None => LatencyResult {
                     seq,
                     success: false,
                     rtt_us: 0.0,
-                    tx_time,
-                    rx_time: 0,
                 },
             };
 
