@@ -221,6 +221,8 @@ impl CapturedPacket {
             0x88E1 => "HomePlug".to_string(),
             0x8902 => "CFM".to_string(),           // 802.1ag Connectivity Fault Management
             0x22EA => "SRP".to_string(),           // Stream Reservation Protocol
+            0x2000 => "CDP".to_string(),           // Cisco Discovery Protocol
+            0x2004 => "CGMP".to_string(),          // Cisco Group Management Protocol
             _ => format!("0x{:04X}", ethertype),
         };
 

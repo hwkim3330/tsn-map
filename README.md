@@ -50,14 +50,17 @@ cd tsn-map
 # Build
 cargo build --release
 
-# Set capabilities (one-time, then no sudo needed)
+# Easy launch (recommended)
+./start-web.sh
+# Opens browser automatically at http://localhost:8080
+
+# Or manual setup:
+# Set capabilities once (requires sudo password)
 sudo setcap 'cap_net_raw,cap_net_admin+eip' ./target/release/tsn-map
 
-# Run (no sudo required after setcap)
-./target/release/tsn-map -i eth0
-
-# Or use the launcher script
-./start-web.sh
+# Run (no sudo needed after setcap)
+./target/release/tsn-map -i eth0 -p 8080
+# Then open http://localhost:8080 in your browser
 ```
 
 ### Options

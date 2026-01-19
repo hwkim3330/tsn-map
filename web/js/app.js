@@ -1109,6 +1109,11 @@ function selectHost(ip) {
     renderHostsList();
     if (state.selectedHost) {
         filterByHost(ip);
+        // Also set as target for latency/throughput tests
+        const pingTarget = document.getElementById('ping-target');
+        const throughputTarget = document.getElementById('throughput-target');
+        if (pingTarget) pingTarget.value = ip;
+        if (throughputTarget) throughputTarget.value = ip;
     }
 }
 
@@ -2041,14 +2046,13 @@ function renderPingResults(data) {
     showNotification(`Ping complete: ${data.results.filter(r => r.success).length}/${data.results.length} successful`, 'success');
 }
 
-// Throughput Test using POST API
+// Throughput Test with real-time SSE streaming
 async function startThroughputTest() {
     const target = document.getElementById('throughput-target').value.trim();
     const duration = parseInt(document.getElementById('throughput-duration').value) || 10;
     const bandwidth = parseInt(document.getElementById('throughput-bandwidth').value) || 100;
-    const mode = document.getElementById('throughput-mode')?.value || 'client';
 
-    if (!target && mode === 'client') {
+    if (!target) {
         showNotification('Please enter a target host', 'error');
         return;
     }
@@ -2071,38 +2075,57 @@ async function startThroughputTest() {
     }
 
     try {
-        const result = await apiCall('/api/test/throughput', 'POST', {
-            target,
-            duration,
-            bandwidth,
-            mode
+        // Use SSE for real-time updates
+        const url = `/api/test/throughput/stream?target=${encodeURIComponent(target)}&duration=${duration}&bandwidth=${bandwidth}`;
+        const eventSource = new EventSource(url);
+
+        eventSource.addEventListener('throughput', (e) => {
+            const data = JSON.parse(e.data);
+
+            // Update live stats
+            document.getElementById('tp-bandwidth').textContent = data.bandwidth_mbps.toFixed(2) + ' Mbps';
+            document.getElementById('tp-packets').textContent = data.total_packets.toLocaleString();
+
+            // Update chart in real-time
+            if (state.charts.throughput) {
+                state.charts.throughput.data.labels.push(`${data.sec}s`);
+                state.charts.throughput.data.datasets[0].data.push(data.bandwidth_mbps);
+                state.charts.throughput.update('none');
+            }
         });
 
-        if (result && result.success && result.data) {
-            const data = result.data;
+        eventSource.addEventListener('complete', (e) => {
+            const data = JSON.parse(e.data);
+            eventSource.close();
 
-            // Update stats
-            const mbps = data.bandwidth_bps ? (data.bandwidth_bps / 1e6).toFixed(2) : 0;
-            document.getElementById('tp-bandwidth').textContent = mbps + ' Mbps';
-            document.getElementById('tp-packets').textContent = (data.packets_sent || 0).toLocaleString();
-            document.getElementById('tp-loss').textContent = (data.loss_percent?.toFixed(2) || '0') + '%';
+            // Update final stats
+            document.getElementById('tp-bandwidth').textContent = data.avg_bandwidth_mbps.toFixed(2) + ' Mbps';
+            document.getElementById('tp-packets').textContent = data.total_packets.toLocaleString();
 
-            // Update chart with single result
-            if (state.charts.throughput) {
-                state.charts.throughput.data.labels = ['Result'];
-                state.charts.throughput.data.datasets[0].data = [parseFloat(mbps)];
-                state.charts.throughput.update();
+            btn.disabled = false;
+            btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Start Test';
+            showNotification(`Throughput: ${data.avg_bandwidth_mbps.toFixed(2)} Mbps`, 'success');
+        });
+
+        eventSource.addEventListener('error', (e) => {
+            eventSource.close();
+            btn.disabled = false;
+            btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Start Test';
+            if (e.data) {
+                showNotification(`Error: ${e.data}`, 'error');
             }
-
-            showNotification(`Throughput: ${mbps} Mbps (${(data.packets_sent || 0).toLocaleString()} packets)`, 'success');
-        } else {
-            showNotification(`Throughput test failed: ${result?.error || 'Unknown error'}`, 'error');
             resetThroughputStats();
-        }
+        });
+
+        eventSource.onerror = () => {
+            eventSource.close();
+            btn.disabled = false;
+            btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Start Test';
+        };
+
     } catch (e) {
         showNotification(`Error: ${e.message}`, 'error');
         resetThroughputStats();
-    } finally {
         btn.disabled = false;
         btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Start Test';
     }

@@ -351,8 +351,8 @@ body {
 }
 
 .packet-list table {
-    width: max-content;
-    min-width: 100%;
+    width: 100%;
+    table-layout: fixed;
     border-collapse: collapse;
     font-size: 0.82em;
     font-family: 'SF Mono', Menlo, monospace;
@@ -382,21 +382,21 @@ body {
     text-overflow: ellipsis;
 }
 
-/* Column widths - optimized for IPv4 addresses */
+/* Column widths */
 .packet-list th:nth-child(1),
-.packet-list td:nth-child(1) { width: 50px; min-width: 40px; }   /* No. */
+.packet-list td:nth-child(1) { width: 55px; min-width: 55px; }   /* No. */
 .packet-list th:nth-child(2),
-.packet-list td:nth-child(2) { width: 70px; min-width: 50px; }   /* Time */
+.packet-list td:nth-child(2) { width: 75px; min-width: 75px; }   /* Time */
 .packet-list th:nth-child(3),
-.packet-list td:nth-child(3) { width: 120px; min-width: 90px; max-width: 120px; }  /* Source */
+.packet-list td:nth-child(3) { width: 140px; min-width: 140px; } /* Source */
 .packet-list th:nth-child(4),
-.packet-list td:nth-child(4) { width: 120px; min-width: 90px; max-width: 120px; }  /* Destination */
+.packet-list td:nth-child(4) { width: 140px; min-width: 140px; } /* Destination */
 .packet-list th:nth-child(5),
-.packet-list td:nth-child(5) { width: 65px; min-width: 50px; }   /* Protocol */
+.packet-list td:nth-child(5) { width: 70px; min-width: 70px; }   /* Protocol */
 .packet-list th:nth-child(6),
-.packet-list td:nth-child(6) { width: 50px; min-width: 40px; }   /* Length */
+.packet-list td:nth-child(6) { width: 55px; min-width: 55px; }   /* Length */
 .packet-list th:nth-child(7),
-.packet-list td:nth-child(7) { min-width: 100px; }               /* Info */
+.packet-list td:nth-child(7) { flex: 1; min-width: 150px; }      /* Info */
 
 .packet-list tr {
     cursor: pointer;
@@ -409,11 +409,10 @@ body {
 
 .packet-list tr.selected {
     background: rgba(10, 132, 255, 0.25) !important;
-    border-left: 3px solid var(--accent-primary);
 }
 
 .packet-list tr.selected td:first-child {
-    padding-left: 9px; /* Compensate for border */
+    box-shadow: inset 3px 0 0 var(--accent-primary);
 }
 
 /* Pagination */
