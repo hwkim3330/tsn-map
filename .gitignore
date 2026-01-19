@@ -1,5 +1,6 @@
 # Rust
 /target/
+/src-tauri/target/
 Cargo.lock
 
 # IDE
@@ -29,3 +30,4 @@ Thumbs.db
 # Environment
 .env
 .env.local
+/src-tauri/binaries/

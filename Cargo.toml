@@ -43,6 +43,31 @@ clap = { version = "4", features = ["derive"] }
 # UUID for packet/flow identification
 uuid = { version = "1", features = ["v4", "serde"] }
 
+# Raw socket for ICMP ping
+socket2 = { version = "0.5", features = ["all"] }
+
+# Network packet construction and parsing
+pnet = "0.35"
+pnet_datalink = "0.35"
+
+# Graph data structures for topology
+petgraph = "0.6"
+
+# DNS resolution
+dns-lookup = "2"
+
+# IP network calculations
+ipnetwork = "0.20"
+
+# MAC address utilities
+mac_address = "1"
+
+# Interface enumeration
+if-addrs = "0.13"
+
+# OUI (MAC vendor) lookup
+oui = "0.7"
+
 [dev-dependencies]
 criterion = "0.5"
 

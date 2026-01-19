@@ -219,11 +219,66 @@ pub async fn get_topology(
 
 // POST /api/topology/scan
 pub async fn scan_topology(
-    State(_state): State<Arc<AppState>>,
-) -> Json<ApiResponse<String>> {
-    // Topology is updated automatically from packet capture
-    // This endpoint can trigger active scanning in the future
-    Json(ApiResponse::success("Topology scan initiated".to_string()))
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<ScanRequest>,
+) -> Json<ApiResponse<ScanResponse>> {
+    use crate::topology::scanner::TopologyScanner;
+
+    let interface = request.interface.unwrap_or_else(|| state.interface.clone());
+    let network = request.network.unwrap_or_else(|| "192.168.1.0/24".to_string());
+    let quick = request.quick.unwrap_or(false);
+
+    let result = tokio::task::spawn_blocking(move || {
+        let scanner = TopologyScanner::new(&interface);
+        if quick {
+            scanner.quick_scan()
+        } else {
+            scanner.arp_scan(&network)
+        }
+    }).await;
+
+    match result {
+        Ok(Ok(scan_result)) => {
+            Json(ApiResponse::success(ScanResponse {
+                hosts_found: scan_result.hosts_found,
+                hosts: scan_result.hosts.into_iter().map(|h| DiscoveredHostResponse {
+                    ip: h.ip,
+                    mac: h.mac,
+                    hostname: h.hostname,
+                    vendor: h.vendor,
+                    response_time_ms: h.response_time_ms,
+                }).collect(),
+                scan_duration_ms: scan_result.scan_duration_ms,
+                network: scan_result.network,
+            }))
+        }
+        Ok(Err(e)) => Json(ApiResponse::error(&format!("Scan failed: {}", e))),
+        Err(e) => Json(ApiResponse::error(&format!("Task error: {}", e))),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct ScanRequest {
+    pub interface: Option<String>,
+    pub network: Option<String>,
+    pub quick: Option<bool>,
+}
+
+#[derive(Serialize)]
+pub struct ScanResponse {
+    pub hosts_found: u32,
+    pub hosts: Vec<DiscoveredHostResponse>,
+    pub scan_duration_ms: u64,
+    pub network: String,
+}
+
+#[derive(Serialize)]
+pub struct DiscoveredHostResponse {
+    pub ip: String,
+    pub mac: String,
+    pub hostname: Option<String>,
+    pub vendor: Option<String>,
+    pub response_time_ms: f64,
 }
 
 // GET /api/tsn/flows
@@ -429,116 +484,59 @@ pub struct PingResponse {
 pub async fn ping_test(
     Json(request): Json<PingRequest>,
 ) -> Json<ApiResponse<PingResponse>> {
-    use std::process::Command;
-    use std::time::Instant;
+    use crate::tester::latency::icmp;
+    use std::net::Ipv4Addr;
 
     let count = request.count.unwrap_or(10).min(100);
     let interval = request.interval.unwrap_or(1000);
-    let interval_sec = (interval as f64 / 1000.0).max(0.2);
 
-    let mut results = Vec::new();
-    let mut rtts = Vec::new();
-
-    for _ in 0..count {
-        let start = Instant::now();
-
-        // Use system ping command
-        let output = Command::new("ping")
-            .args(["-c", "1", "-W", "2", &request.target])
-            .output();
-
-        match output {
-            Ok(out) => {
-                let elapsed = start.elapsed().as_secs_f64() * 1000.0;
-                let stdout = String::from_utf8_lossy(&out.stdout);
-
-                if out.status.success() {
-                    // Parse RTT from ping output
-                    let rtt = parse_ping_rtt(&stdout).unwrap_or(elapsed);
-                    let ttl = parse_ping_ttl(&stdout);
-
-                    results.push(PingResult {
-                        success: true,
-                        rtt_ms: rtt,
-                        ttl,
-                    });
-                    rtts.push(rtt);
-                } else {
-                    results.push(PingResult {
-                        success: false,
-                        rtt_ms: 0.0,
-                        ttl: None,
-                    });
+    // Parse target IP
+    let target_ip: Ipv4Addr = match request.target.parse() {
+        Ok(ip) => ip,
+        Err(_) => {
+            // Try DNS resolution
+            match tokio::net::lookup_host(format!("{}:0", request.target)).await {
+                Ok(mut addrs) => {
+                    match addrs.next() {
+                        Some(addr) => match addr.ip() {
+                            std::net::IpAddr::V4(ip) => ip,
+                            _ => return Json(ApiResponse::error("IPv6 not supported yet")),
+                        },
+                        None => return Json(ApiResponse::error("Could not resolve hostname")),
+                    }
                 }
+                Err(_) => return Json(ApiResponse::error("Could not resolve hostname")),
             }
-            Err(_) => {
-                results.push(PingResult {
-                    success: false,
-                    rtt_ms: 0.0,
-                    ttl: None,
-                });
-            }
-        }
-
-        // Wait for interval
-        tokio::time::sleep(tokio::time::Duration::from_secs_f64(interval_sec)).await;
-    }
-
-    // Calculate stats
-    let stats = if !rtts.is_empty() {
-        let min = rtts.iter().cloned().fold(f64::INFINITY, f64::min);
-        let max = rtts.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-        let avg = rtts.iter().sum::<f64>() / rtts.len() as f64;
-        let loss = ((count as usize - rtts.len()) as f64 / count as f64) * 100.0;
-
-        PingStats {
-            min_ms: min,
-            avg_ms: avg,
-            max_ms: max,
-            loss_percent: loss,
-        }
-    } else {
-        PingStats {
-            min_ms: 0.0,
-            avg_ms: 0.0,
-            max_ms: 0.0,
-            loss_percent: 100.0,
         }
     };
 
-    Json(ApiResponse::success(PingResponse { results, stats }))
-}
+    // Run ICMP ping test in blocking task (requires raw socket)
+    let result = tokio::task::spawn_blocking(move || {
+        icmp::run_icmp_test(target_ip, count, interval)
+    }).await;
 
-fn parse_ping_rtt(output: &str) -> Option<f64> {
-    // Parse "time=X.XX ms" from ping output
-    for line in output.lines() {
-        if let Some(idx) = line.find("time=") {
-            let rest = &line[idx + 5..];
-            if let Some(end) = rest.find(" ms") {
-                if let Ok(rtt) = rest[..end].parse::<f64>() {
-                    return Some(rtt);
-                }
-            }
-        }
-    }
-    None
-}
+    match result {
+        Ok((results, stats)) => {
+            let ping_results: Vec<PingResult> = results.iter().map(|r| PingResult {
+                success: r.success,
+                rtt_ms: r.rtt_us / 1000.0,
+                ttl: None,
+            }).collect();
 
-fn parse_ping_ttl(output: &str) -> Option<u8> {
-    // Parse "ttl=XX" from ping output
-    for line in output.lines() {
-        if let Some(idx) = line.find("ttl=") {
-            let rest = &line[idx + 4..];
-            if let Some(end) = rest.find(char::is_whitespace) {
-                if let Ok(ttl) = rest[..end].parse::<u8>() {
-                    return Some(ttl);
-                }
-            } else if let Ok(ttl) = rest.parse::<u8>() {
-                return Some(ttl);
-            }
+            let ping_stats = PingStats {
+                min_ms: stats.min_us / 1000.0,
+                avg_ms: stats.avg_us / 1000.0,
+                max_ms: stats.max_us / 1000.0,
+                loss_percent: stats.loss_percent,
+            };
+
+            Json(ApiResponse::success(PingResponse {
+                results: ping_results,
+                stats: ping_stats,
+            }))
         }
+        Err(e) => Json(ApiResponse::error(&format!("Ping test failed: {}", e))),
     }
-    None
 }
 
 #[derive(Deserialize)]
@@ -563,85 +561,88 @@ pub struct ThroughputResponse {
 pub async fn throughput_test(
     Json(request): Json<ThroughputRequest>,
 ) -> Json<ApiResponse<ThroughputResponse>> {
-    use std::process::Command;
+    use crate::tester::throughput::{ThroughputTester, ThroughputServer};
+    use std::net::{IpAddr, SocketAddr};
 
     let duration = request.duration.unwrap_or(10).min(60);
-    let protocol = request.protocol.clone().unwrap_or_else(|| "tcp".to_string());
     let mode = request.mode.clone().unwrap_or_else(|| "client".to_string());
-
-    // Use iperf3 for throughput testing
-    let mut args = vec!["-J".to_string()]; // JSON output
+    let bandwidth = request.bandwidth.map(|b| b as u64 * 1_000_000); // Mbps to bps
+    let packet_size = 1400usize; // MTU-safe default
 
     if mode == "server" {
-        args.push("-s".to_string());
-        args.push("-1".to_string()); // One-off mode
+        // Run as server
+        let result = tokio::task::spawn_blocking(move || {
+            let server = ThroughputServer::new("0.0.0.0", Some(7879))?;
+            // Run for duration + some buffer
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs((duration + 5) as u64));
+            });
+            server.run()
+        }).await;
+
+        match result {
+            Ok(Ok(r)) => Json(ApiResponse::success(ThroughputResponse {
+                bandwidth_bps: r.bandwidth_bps as u64,
+                packets_sent: r.packets_sent,
+                packets_received: r.packets_received,
+                loss_percent: r.packet_loss_percent,
+                jitter_ms: None,
+            })),
+            Ok(Err(e)) => Json(ApiResponse::error(&format!("Server error: {}", e))),
+            Err(e) => Json(ApiResponse::error(&format!("Task error: {}", e))),
+        }
     } else {
-        if let Some(ref target) = request.target {
-            args.push("-c".to_string());
-            args.push(target.clone());
+        // Run as client
+        let target = match &request.target {
+            Some(t) => t.clone(),
+            None => return Json(ApiResponse::error("Target required for client mode")),
+        };
+
+        // Parse target (ip:port or just ip)
+        let target_addr: SocketAddr = if target.contains(':') {
+            match target.parse() {
+                Ok(addr) => addr,
+                Err(_) => return Json(ApiResponse::error("Invalid target address")),
+            }
         } else {
-            return Json(ApiResponse::error("Target required for client mode"));
-        }
-    }
-
-    args.push("-t".to_string());
-    args.push(duration.to_string());
-
-    if protocol == "udp" {
-        args.push("-u".to_string());
-        if let Some(bw) = request.bandwidth {
-            args.push("-b".to_string());
-            args.push(format!("{}M", bw));
-        }
-    }
-
-    let output = Command::new("iperf3")
-        .args(&args)
-        .output();
-
-    match output {
-        Ok(out) => {
-            let stdout = String::from_utf8_lossy(&out.stdout);
-
-            // Parse iperf3 JSON output
-            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) {
-                let end = json.get("end").and_then(|e| e.get("sum"));
-
-                if let Some(sum) = end {
-                    let bits_per_second = sum.get("bits_per_second")
-                        .and_then(|v| v.as_f64())
-                        .unwrap_or(0.0) as u64;
-
-                    let packets = sum.get("packets")
-                        .and_then(|v| v.as_u64())
-                        .unwrap_or(0);
-
-                    let lost = sum.get("lost_packets")
-                        .and_then(|v| v.as_u64())
-                        .unwrap_or(0);
-
-                    let loss_percent = if packets > 0 {
-                        (lost as f64 / packets as f64) * 100.0
-                    } else {
-                        0.0
-                    };
-
-                    let jitter = sum.get("jitter_ms")
-                        .and_then(|v| v.as_f64());
-
-                    return Json(ApiResponse::success(ThroughputResponse {
-                        bandwidth_bps: bits_per_second,
-                        packets_sent: packets,
-                        packets_received: packets.saturating_sub(lost),
-                        loss_percent,
-                        jitter_ms: jitter,
-                    }));
+            // Try to parse as IP, default port 7879
+            match target.parse::<IpAddr>() {
+                Ok(ip) => SocketAddr::new(ip, 7879),
+                Err(_) => {
+                    // Try DNS
+                    match tokio::net::lookup_host(format!("{}:7879", target)).await {
+                        Ok(mut addrs) => match addrs.next() {
+                            Some(addr) => addr,
+                            None => return Json(ApiResponse::error("Could not resolve hostname")),
+                        },
+                        Err(_) => return Json(ApiResponse::error("Could not resolve hostname")),
+                    }
                 }
             }
+        };
 
-            Json(ApiResponse::error("Failed to parse iperf3 output"))
+        let result = tokio::task::spawn_blocking(move || {
+            let mut tester = ThroughputTester::new(target_addr.ip(), Some(target_addr.port()))
+                .with_packet_size(packet_size);
+
+            if let Some(bw) = bandwidth {
+                tester = tester.with_bandwidth_limit(bw);
+            }
+
+            tester.run_client(duration)
+        }).await;
+
+        match result {
+            Ok(Ok(r)) => Json(ApiResponse::success(ThroughputResponse {
+                bandwidth_bps: r.bandwidth_bps as u64,
+                packets_sent: r.packets_sent,
+                packets_received: r.packets_received,
+                loss_percent: r.packet_loss_percent,
+                jitter_ms: None,
+            })),
+            Ok(Err(e)) => Json(ApiResponse::error(&format!("Test error: {}", e))),
+            Err(e) => Json(ApiResponse::error(&format!("Task error: {}", e))),
         }
-        Err(e) => Json(ApiResponse::error(&format!("Failed to run iperf3: {}. Make sure iperf3 is installed.", e))),
     }
 }
 

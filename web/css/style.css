@@ -514,6 +514,13 @@ body {
     accent-color: var(--accent-primary);
 }
 
+.topology-container {
+    display: flex;
+    gap: 16px;
+    flex: 1;
+    min-height: 0;
+}
+
 #topology-graph {
     flex: 1;
     background: var(--bg-card);
@@ -524,20 +531,77 @@ body {
     box-shadow: var(--shadow-sm);
 }
 
-.topology-legend {
-    display: flex;
-    gap: 24px;
-    margin-top: 16px;
-    justify-content: center;
-    flex-wrap: wrap;
+.topology-sidebar {
+    width: 200px;
+    background: var(--bg-card);
+    border-radius: 16px;
+    border: 1px solid var(--border-light);
+    padding: 16px;
+    overflow-y: auto;
+    flex-shrink: 0;
+}
+
+.sidebar-section {
+    margin-bottom: 16px;
+}
+
+.sidebar-title {
+    font-size: 0.75em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-tertiary);
+    margin-bottom: 8px;
 }
 
 .legend-item {
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 0.85em;
+    font-size: 0.8em;
     color: var(--text-secondary);
+    padding: 4px 0;
+}
+
+.legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.legend-border {
+    width: 16px;
+    height: 16px;
+    border: 3px solid #f0883e;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.legend-border.tsn {
+    border-color: #f0883e;
+}
+
+.stat-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85em;
+    padding: 4px 0;
+    color: var(--text-secondary);
+}
+
+.stat-row span:last-child {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* Legacy legend styles for backward compat */
+.topology-legend {
+    display: flex;
+    gap: 24px;
+    margin-top: 16px;
+    justify-content: center;
+    flex-wrap: wrap;
 }
 
 .dot {
@@ -644,6 +708,11 @@ body {
     transform: translateY(-2px);
 }
 
+.host-card.selected {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.3);
+}
+
 .host-card-header {
     display: flex;
     justify-content: space-between;
@@ -656,6 +725,11 @@ body {
     font-weight: 600;
     color: var(--text-primary);
     font-family: 'SF Mono', Menlo, monospace;
+    word-break: break-all;
+}
+
+.host-ip.ipv6 {
+    font-size: 0.85em;
 }
 
 .host-mac {
@@ -1368,6 +1442,11 @@ body {
     border-radius: 6px;
     color: var(--text-primary);
     font-size: 0.85em;
+}
+
+/* Hide TSN Configuration section (requires hardware support) */
+.tester-card-wide:has(.tsn-config-grid) {
+    display: none;
 }
 
 /* Responsive */

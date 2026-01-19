@@ -2,6 +2,7 @@ mod capture;
 mod protocols;
 mod topology;
 mod api;
+mod tester;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};

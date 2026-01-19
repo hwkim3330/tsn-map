@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=TSN-Map
+Comment=Network Visualization and Analysis Tool
+Exec=/home/kim/tsn-map/run.sh
+Icon=/home/kim/tsn-map/icon.png
+Terminal=false
+Type=Application
+Categories=Network;Utility;
+Keywords=network;analyzer;wireshark;nmap;topology;

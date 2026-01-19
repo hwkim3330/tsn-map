@@ -23,6 +23,7 @@ const state = {
     filter: '',
     autoScroll: true,
     layoutMode: 'force',
+    selectedHost: null,
     // Pagination
     currentPage: 1,
     pageSize: 100,
@@ -106,6 +107,7 @@ function setupEventListeners() {
     document.getElementById('btn-zoom-in').addEventListener('click', () => zoomTopology(1.2));
     document.getElementById('btn-zoom-out').addEventListener('click', () => zoomTopology(0.8));
     document.getElementById('btn-zoom-fit').addEventListener('click', fitTopology);
+    document.getElementById('btn-scan-network')?.addEventListener('click', scanNetwork);
     document.getElementById('show-labels').addEventListener('change', renderTopology);
     document.getElementById('auto-refresh').addEventListener('change', (e) => {
         state.autoRefresh = e.target.checked;
@@ -772,7 +774,27 @@ function initializeCharts() {
             ...chartOptions,
             plugins: {
                 ...chartOptions.plugins,
-                legend: { position: 'right', labels: { color: '#e6edf3' } }
+                legend: {
+                    position: 'right',
+                    labels: {
+                        color: '#e6edf3',
+                        font: { size: 10 },
+                        boxWidth: 12,
+                        padding: 8,
+                        generateLabels: function(chart) {
+                            const data = chart.data;
+                            if (data.labels.length && data.datasets.length) {
+                                return data.labels.map((label, i) => ({
+                                    text: label.length > 12 ? label.substring(0, 12) + '...' : label,
+                                    fillStyle: data.datasets[0].backgroundColor[i],
+                                    hidden: false,
+                                    index: i
+                                }));
+                            }
+                            return [];
+                        }
+                    }
+                }
             }
         }
     });
@@ -843,7 +865,17 @@ function initializeCharts() {
             indexAxis: 'y',
             scales: {
                 x: { grid: { color: '#30363d' }, ticks: { color: '#8b949e' }, beginAtZero: true },
-                y: { grid: { color: '#30363d' }, ticks: { color: '#e6edf3', font: { size: 10 } } }
+                y: {
+                    grid: { color: '#30363d' },
+                    ticks: {
+                        color: '#e6edf3',
+                        font: { size: 9 },
+                        callback: function(value, index) {
+                            const label = this.getLabelForValue(value);
+                            return label.length > 20 ? label.substring(0, 20) + '...' : label;
+                        }
+                    }
+                }
             }
         }
     });
@@ -965,10 +997,13 @@ function renderHostsList() {
         return 0;
     });
 
-    container.innerHTML = hosts.slice(0, 100).map(host => `
-        <div class="host-card" onclick="filterByHost('${host.ip}')">
+    container.innerHTML = hosts.slice(0, 100).map(host => {
+        const isIPv6 = host.ip.includes(':');
+        const isSelected = state.selectedHost === host.ip;
+        return `
+        <div class="host-card${isSelected ? ' selected' : ''}" onclick="selectHost('${host.ip}')">
             <div class="host-header">
-                <span class="host-ip">${host.ip}</span>
+                <span class="host-ip${isIPv6 ? ' ipv6' : ''}">${host.ip}</span>
                 <span class="host-type">${getHostType(host)}</span>
             </div>
             <div class="host-mac">${host.mac || 'Unknown'}</div>
@@ -994,7 +1029,15 @@ function renderHostsList() {
                 Last seen: ${formatTimeAgo(host.last_seen)}
             </div>
         </div>
-    `).join('');
+    `}).join('');
+}
+
+function selectHost(ip) {
+    state.selectedHost = (state.selectedHost === ip) ? null : ip;
+    renderHostsList();
+    if (state.selectedHost) {
+        filterByHost(ip);
+    }
 }
 
 function getHostType(host) {
@@ -1034,6 +1077,9 @@ async function refreshTopology() {
 }
 
 function renderTopology() {
+    // Update sidebar stats
+    updateTopologyStats();
+
     const container = document.getElementById('topology-graph');
     container.innerHTML = '';
 
@@ -1118,20 +1164,21 @@ function renderTopology() {
             .on('drag', dragged)
             .on('end', dragended));
 
+    // Node circle
     node.append('circle')
         .attr('r', d => getNodeRadius(d))
         .attr('fill', d => getNodeColor(d))
-        .attr('stroke', '#30363d')
-        .attr('stroke-width', 2);
+        .attr('stroke', d => d.tsn_capable ? '#f0883e' : '#30363d')
+        .attr('stroke-width', d => d.tsn_capable ? 3 : 2);
 
     // Labels
     if (document.getElementById('show-labels').checked) {
         node.append('text')
-            .attr('dx', 15)
+            .attr('dx', d => getNodeRadius(d) + 5)
             .attr('dy', 4)
             .attr('fill', '#c9d1d9')
             .attr('font-size', '11px')
-            .text(d => d.ip_addresses?.[0] || d.mac_address?.substring(0, 8) || d.id.substring(0, 8));
+            .text(d => d.hostname || d.ip_addresses?.[0] || d.mac_address?.substring(0, 8) || d.id.substring(0, 8));
     }
 
     // Tooltip
@@ -1170,31 +1217,41 @@ function renderTopology() {
 }
 
 function getNodeColor(node) {
-    const type = node.node_type?.toLowerCase() || '';
-    const ip = node.ip_addresses?.[0] || '';
+    const type = node.node_type || 'Unknown';
 
-    // Gateway detection
-    if (ip.endsWith('.1') || ip.endsWith('.254') || type.includes('router') || type.includes('gateway')) {
-        return '#d29922'; // Orange for gateway
-    }
+    // Color based on device type
+    const typeColors = {
+        'PtpGrandmaster': '#f0883e', // Orange - PTP Master
+        'TsnBridge': '#8b949e',      // Gray - TSN device
+        'Router': '#d29922',         // Yellow - Router
+        'Gateway': '#d29922',        // Yellow - Gateway
+        'Switch': '#2ea043',         // Green - Switch
+        'Bridge': '#2ea043',         // Green - Bridge
+        'AccessPoint': '#a371f7',    // Purple - WiFi AP
+        'Host': '#2f81f7',           // Blue - Host/PC
+        'EndStation': '#58a6ff',     // Light blue - End device
+        'Repeater': '#7d8590',       // Gray - Repeater
+        'Unknown': '#8b949e',        // Gray - Unknown
+    };
 
-    // Broadcast/Multicast
-    if (ip === '255.255.255.255' || ip.endsWith('.255') || ip.startsWith('224.') || ip.startsWith('239.')) {
-        return '#a371f7'; // Purple for broadcast
-    }
-
-    // Local
-    if (ip.startsWith('192.168.') || ip.startsWith('10.') || ip.startsWith('172.16.')) {
-        return '#2f81f7'; // Blue for local
-    }
-
-    // Remote
-    return '#58a6ff'; // Light blue for remote
+    return typeColors[type] || '#8b949e';
 }
 
 function getNodeRadius(node) {
-    const packets = node.packets_count || 0;
-    return Math.min(Math.max(8, Math.log(packets + 1) * 3), 20);
+    const packets = (node.packets_sent || 0) + (node.packets_received || 0);
+    const base = 10;
+    const scaled = Math.min(Math.max(base, Math.log(packets + 1) * 3 + base), 25);
+
+    // Larger for important node types
+    const type = node.node_type || 'Unknown';
+    if (type === 'PtpGrandmaster' || type === 'Router' || type === 'Gateway') {
+        return scaled + 5;
+    }
+    if (type === 'TsnBridge' || type === 'Switch') {
+        return scaled + 3;
+    }
+
+    return scaled;
 }
 
 function setLayout(mode) {
@@ -1214,6 +1271,47 @@ function fitTopology() {
     if (svg && zoom) {
         svg.transition().duration(300).call(zoom.transform, d3.zoomIdentity);
     }
+}
+
+// Network Scanning
+async function scanNetwork() {
+    const btn = document.getElementById('btn-scan-network');
+    btn.disabled = true;
+    btn.textContent = 'Scanning...';
+
+    try {
+        const data = await apiCall('/api/topology/scan', {
+            method: 'POST',
+            body: JSON.stringify({ quick: true }),
+        });
+
+        if (data && data.success) {
+            const result = data.data;
+            showNotification(`Scan complete: Found ${result.hosts_found} hosts in ${result.scan_duration_ms}ms`, 'success');
+            // Refresh topology to include new hosts
+            await refreshTopology();
+        } else {
+            showNotification(`Scan failed: ${data?.error || 'Unknown error'}`, 'error');
+        }
+    } catch (err) {
+        showNotification(`Scan error: ${err.message}`, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Scan Network';
+    }
+}
+
+function updateTopologyStats() {
+    const topology = state.topology;
+    const tsnCount = topology.nodes?.filter(n => n.tsn_capable).length || 0;
+
+    const nodeCountEl = document.getElementById('topo-node-count');
+    const linkCountEl = document.getElementById('topo-link-count');
+    const tsnCountEl = document.getElementById('topo-tsn-count');
+
+    if (nodeCountEl) nodeCountEl.textContent = topology.nodes?.length || 0;
+    if (linkCountEl) linkCountEl.textContent = topology.links?.length || 0;
+    if (tsnCountEl) tsnCountEl.textContent = tsnCount;
 }
 
 // Interface Selection
