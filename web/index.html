@@ -66,21 +66,23 @@
                         <colgroup>
                             <col style="width: 55px">
                             <col style="width: 80px">
-                            <col style="width: 140px">
-                            <col style="width: 140px">
-                            <col style="width: 75px">
-                            <col style="width: 55px">
+                            <col style="width: 65px">
+                            <col style="width: 130px">
+                            <col style="width: 130px">
+                            <col style="width: 70px">
+                            <col style="width: 50px">
                             <col>
                         </colgroup>
                         <thead>
                             <tr>
                                 <th class="resizable" data-col="0">No.<div class="resize-handle"></div></th>
                                 <th class="resizable" data-col="1">Time<div class="resize-handle"></div></th>
-                                <th class="resizable" data-col="2">Source<div class="resize-handle"></div></th>
-                                <th class="resizable" data-col="3">Destination<div class="resize-handle"></div></th>
-                                <th class="resizable" data-col="4">Protocol<div class="resize-handle"></div></th>
-                                <th class="resizable" data-col="5">Length<div class="resize-handle"></div></th>
-                                <th data-col="6">Info</th>
+                                <th class="resizable" data-col="2">Delta<div class="resize-handle"></div></th>
+                                <th class="resizable" data-col="3">Source<div class="resize-handle"></div></th>
+                                <th class="resizable" data-col="4">Destination<div class="resize-handle"></div></th>
+                                <th class="resizable" data-col="5">Protocol<div class="resize-handle"></div></th>
+                                <th class="resizable" data-col="6">Len<div class="resize-handle"></div></th>
+                                <th data-col="7">Info</th>
                             </tr>
                         </thead>
                         <tbody id="packet-tbody">
@@ -254,9 +256,12 @@
                             <div class="toolbar-group">
                                 <label>Interval:</label>
                                 <select id="iograph-interval">
+                                    <option value="1">1ms</option>
                                     <option value="10">10ms</option>
                                     <option value="100" selected>100ms</option>
+                                    <option value="500">500ms</option>
                                     <option value="1000">1s</option>
+                                    <option value="5000">5s</option>
                                     <option value="10000">10s</option>
                                 </select>
                             </div>

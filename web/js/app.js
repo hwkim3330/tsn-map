@@ -383,13 +383,14 @@ function flushPendingPackets() {
     updateCounters();
 }
 
-function createPacketRow(packet) {
+function createPacketRow(packet, prevPacket = null) {
     const row = document.createElement('tr');
     row.className = getProtocolClass(packet);
     row.dataset.id = packet.id;
     row.onclick = () => selectPacket(packet);
 
     const time = formatTime(packet.timestamp);
+    const delta = calculateDelta(packet, prevPacket);
     const info = getPacketInfo(packet);
     const srcAddr = shortenAddress(packet.info.src_ip || packet.info.src_mac);
     const dstAddr = shortenAddress(packet.info.dst_ip || packet.info.dst_mac);
@@ -397,6 +398,7 @@ function createPacketRow(packet) {
     row.innerHTML = `
         <td>${packet.id}</td>
         <td>${time}</td>
+        <td class="delta-cell">${delta}</td>
         <td title="${packet.info.src_ip || packet.info.src_mac || ''}">${srcAddr}</td>
         <td title="${packet.info.dst_ip || packet.info.dst_mac || ''}">${dstAddr}</td>
         <td><span class="proto-badge proto-${(packet.info.protocol || packet.info.ethertype_name || '').toLowerCase()}">${packet.info.protocol || packet.info.ethertype_name || '-'}</span></td>
@@ -405,6 +407,20 @@ function createPacketRow(packet) {
     `;
 
     return row;
+}
+
+// Calculate delta time between packets
+function calculateDelta(packet, prevPacket) {
+    if (!prevPacket) return '0.000000';
+
+    const currTime = new Date(packet.timestamp).getTime();
+    const prevTime = new Date(prevPacket.timestamp).getTime();
+    const deltaMs = currTime - prevTime;
+
+    if (deltaMs < 0) return '0.000000';
+    if (deltaMs < 1000) return (deltaMs / 1000).toFixed(6);
+    if (deltaMs < 60000) return (deltaMs / 1000).toFixed(3);
+    return (deltaMs / 1000).toFixed(1);
 }
 
 // Shorten IPv6 and long addresses for display
@@ -516,8 +532,11 @@ function renderPacketList() {
 
     // Use document fragment for batch DOM update
     const fragment = document.createDocumentFragment();
-    displayPackets.forEach(packet => {
-        const row = createPacketRow(packet);
+    displayPackets.forEach((packet, index) => {
+        // Get previous packet for delta calculation
+        const globalIndex = startIdx + index;
+        const prevPacket = globalIndex > 0 ? state.filteredPackets[globalIndex - 1] : null;
+        const row = createPacketRow(packet, prevPacket);
         fragment.appendChild(row);
     });
     tbody.appendChild(fragment);
@@ -550,7 +569,9 @@ function updatePaginationUI() {
 // appendPacketRow - now uses createPacketRow for consistency
 function appendPacketRow(packet, live = false) {
     const tbody = document.getElementById('packet-tbody');
-    const row = createPacketRow(packet);
+    // Get previous packet for delta calculation
+    const prevPacket = state.packets.length > 1 ? state.packets[state.packets.length - 2] : null;
+    const row = createPacketRow(packet, prevPacket);
     tbody.appendChild(row);
 
     // Auto-scroll only for live packets on last page
