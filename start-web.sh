@@ -43,6 +43,12 @@ if ! getcap "$BINARY" 2>/dev/null | grep -q cap_net_raw; then
     fi
 fi
 
+# Disable GRO for accurate packet capture (prevents packet merging)
+if ethtool -k "$INTERFACE" 2>/dev/null | grep -q "generic-receive-offload: on"; then
+    echo -e "${YELLOW}Disabling GRO on ${INTERFACE}...${NC}"
+    sudo ethtool -K "$INTERFACE" gro off 2>/dev/null || true
+fi
+
 # Open browser
 (sleep 2 && xdg-open http://localhost:8080 2>/dev/null) &
 
