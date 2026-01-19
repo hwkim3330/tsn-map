@@ -52,6 +52,14 @@ function initializeUI() {
             tab.classList.add('active');
             document.getElementById(`tab-${tab.dataset.tab}`).classList.add('active');
 
+            // Stop auto-refresh when leaving tabs
+            if (tab.dataset.tab !== 'latency') {
+                stopIntervalRefresh();
+            }
+            if (tab.dataset.tab !== 'iograph') {
+                stopIoGraphRefresh();
+            }
+
             if (tab.dataset.tab === 'topology') {
                 setTimeout(renderTopology, 100);
             } else if (tab.dataset.tab === 'stats') {
@@ -64,11 +72,26 @@ function initializeUI() {
                     document.getElementById('detail-placeholder').style.display = 'flex';
                     document.getElementById('detail-content').style.display = 'none';
                 }
+            } else if (tab.dataset.tab === 'iograph') {
+                // Resize chart and fetch data when tab becomes visible
+                if (state.charts.iograph) {
+                    setTimeout(() => state.charts.iograph.resize(), 100);
+                }
+                fetchIoGraphData();
+                startIoGraphRefresh();
             } else if (tab.dataset.tab === 'latency') {
-                // Resize chart when tab becomes visible
+                // Resize charts when tab becomes visible
                 if (state.charts.latency) {
                     setTimeout(() => state.charts.latency.resize(), 100);
                 }
+                if (state.charts.interval) {
+                    setTimeout(() => state.charts.interval.resize(), 100);
+                }
+                if (state.charts.rtt) {
+                    setTimeout(() => state.charts.rtt.resize(), 100);
+                }
+                // Start interval auto-refresh
+                startIntervalRefresh();
             } else if (tab.dataset.tab === 'throughput') {
                 // Resize chart when tab becomes visible
                 if (state.charts.throughput) {
@@ -132,6 +155,28 @@ function setupEventListeners() {
     document.getElementById('btn-throughput-start')?.addEventListener('click', startThroughputTest);
     document.getElementById('btn-cbs-apply')?.addEventListener('click', applyCbsConfig);
     document.getElementById('btn-tas-apply')?.addEventListener('click', applyTasConfig);
+
+    // Interval/RTT controls
+    document.getElementById('btn-refresh-intervals')?.addEventListener('click', fetchIntervalData);
+    document.getElementById('auto-refresh-intervals')?.addEventListener('change', (e) => {
+        if (e.target.checked) {
+            startIntervalRefresh();
+        } else {
+            stopIntervalRefresh();
+        }
+    });
+
+    // IO Graph controls
+    document.getElementById('btn-iograph-refresh')?.addEventListener('click', fetchIoGraphData);
+    document.getElementById('iograph-interval')?.addEventListener('change', fetchIoGraphData);
+    document.getElementById('iograph-yaxis')?.addEventListener('change', fetchIoGraphData);
+    document.getElementById('iograph-auto-refresh')?.addEventListener('change', (e) => {
+        if (e.target.checked) {
+            startIoGraphRefresh();
+        } else {
+            stopIoGraphRefresh();
+        }
+    });
 }
 
 // API Functions
@@ -1943,6 +1988,347 @@ function initializeTestCharts() {
                 }
             }
         });
+    }
+
+    // Packet Interval Chart (Wireshark-style delta time)
+    const intervalCtx = document.getElementById('interval-chart');
+    if (intervalCtx) {
+        state.charts.interval = new Chart(intervalCtx.getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Delta (μs)',
+                    data: [],
+                    borderColor: '#ff9f0a',
+                    backgroundColor: 'rgba(255, 159, 10, 0.1)',
+                    tension: 0,
+                    fill: true,
+                    pointRadius: 1,
+                    pointHoverRadius: 4,
+                    borderWidth: 1.5
+                }]
+            },
+            options: {
+                ...chartOptions,
+                plugins: {
+                    ...chartOptions.plugins,
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => `${ctx.parsed.y.toFixed(1)} μs`
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { color: '#30363d' },
+                        ticks: { color: '#8b949e', maxRotation: 0, maxTicksLimit: 10 },
+                        title: { display: true, text: 'Packet #', color: '#8b949e' }
+                    },
+                    y: {
+                        grid: { color: '#30363d' },
+                        ticks: { color: '#8b949e' },
+                        beginAtZero: true,
+                        title: { display: true, text: 'μs', color: '#8b949e' }
+                    }
+                }
+            }
+        });
+    }
+
+    // IO Graph Chart (Wireshark-style)
+    const iographCtx = document.getElementById('iograph-chart');
+    if (iographCtx) {
+        state.charts.iograph = new Chart(iographCtx.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Packets',
+                    data: [],
+                    borderColor: '#0a84ff',
+                    backgroundColor: 'rgba(10, 132, 255, 0.6)',
+                    borderWidth: 1,
+                    barPercentage: 1.0,
+                    categoryPercentage: 1.0,
+                }]
+            },
+            options: {
+                ...chartOptions,
+                plugins: {
+                    ...chartOptions.plugins,
+                    legend: { display: true, position: 'top' },
+                    tooltip: {
+                        callbacks: {
+                            title: (ctx) => `Time: ${ctx[0].label}`,
+                            label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString()}`
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { color: '#30363d', display: false },
+                        ticks: { color: '#8b949e', maxRotation: 0, maxTicksLimit: 15 },
+                        title: { display: true, text: 'Time', color: '#8b949e' }
+                    },
+                    y: {
+                        grid: { color: '#30363d' },
+                        ticks: { color: '#8b949e' },
+                        beginAtZero: true,
+                        title: { display: true, text: 'Packets', color: '#8b949e' }
+                    }
+                }
+            }
+        });
+    }
+
+    // TCP RTT Chart
+    const rttCtx = document.getElementById('rtt-chart');
+    if (rttCtx) {
+        state.charts.rtt = new Chart(rttCtx.getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'RTT (μs)',
+                    data: [],
+                    borderColor: '#bf5af2',
+                    backgroundColor: 'rgba(191, 90, 242, 0.1)',
+                    tension: 0,
+                    fill: true,
+                    pointRadius: 2,
+                    pointHoverRadius: 5,
+                    borderWidth: 1.5
+                }]
+            },
+            options: {
+                ...chartOptions,
+                plugins: {
+                    ...chartOptions.plugins,
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => `${ctx.parsed.y.toFixed(1)} μs`
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { color: '#30363d' },
+                        ticks: { color: '#8b949e', maxRotation: 0, maxTicksLimit: 10 },
+                        title: { display: true, text: 'Sample #', color: '#8b949e' }
+                    },
+                    y: {
+                        grid: { color: '#30363d' },
+                        ticks: { color: '#8b949e' },
+                        beginAtZero: true,
+                        title: { display: true, text: 'μs', color: '#8b949e' }
+                    }
+                }
+            }
+        });
+    }
+}
+
+// ============================================
+// IO Graph (Wireshark-style)
+// ============================================
+
+let ioGraphRefreshTimer = null;
+
+async function fetchIoGraphData() {
+    const intervalMs = document.getElementById('iograph-interval')?.value || 100;
+    const yAxis = document.getElementById('iograph-yaxis')?.value || 'packets';
+
+    try {
+        const response = await fetch(`${API_BASE}/api/iograph?interval_ms=${intervalMs}`);
+        const result = await response.json();
+
+        if (result.success && result.data) {
+            updateIoGraphDisplay(result.data, yAxis);
+        }
+    } catch (error) {
+        console.error('Failed to fetch IO graph data:', error);
+    }
+}
+
+function updateIoGraphDisplay(data, yAxis) {
+    // Update statistics
+    document.getElementById('io-total-packets').textContent = data.total_packets.toLocaleString();
+    document.getElementById('io-total-bytes').textContent = formatBytes(data.total_bytes);
+    document.getElementById('io-avg-pps').textContent = data.avg_pps.toFixed(1);
+    document.getElementById('io-peak-pps').textContent = data.peak_pps.toLocaleString();
+    document.getElementById('io-duration').textContent = formatDuration(data.duration_ms);
+
+    // Update chart
+    if (state.charts.iograph && data.buckets && data.buckets.length > 0) {
+        const labels = data.buckets.map(b => formatTimeLabel(b.time_ms));
+
+        let values, label, color;
+        if (yAxis === 'bytes') {
+            values = data.buckets.map(b => b.bytes);
+            label = 'Bytes';
+            color = '#30d158';
+        } else if (yAxis === 'bits') {
+            values = data.buckets.map(b => b.bytes * 8);
+            label = 'Bits';
+            color = '#ff9f0a';
+        } else {
+            values = data.buckets.map(b => b.packets);
+            label = 'Packets';
+            color = '#0a84ff';
+        }
+
+        state.charts.iograph.data.labels = labels;
+        state.charts.iograph.data.datasets[0].data = values;
+        state.charts.iograph.data.datasets[0].label = label;
+        state.charts.iograph.data.datasets[0].borderColor = color;
+        state.charts.iograph.data.datasets[0].backgroundColor = color.replace(')', ', 0.1)').replace('rgb', 'rgba');
+        state.charts.iograph.update('none');
+    }
+
+    // Update protocol breakdown
+    updateProtocolLegend(data.protocols);
+}
+
+function updateProtocolLegend(protocols) {
+    const container = document.getElementById('protocol-legend');
+    if (!container) return;
+
+    const colors = ['#0a84ff', '#30d158', '#ff9f0a', '#bf5af2', '#ff453a', '#64d2ff', '#ffd60a', '#ac8e68'];
+
+    container.innerHTML = protocols.slice(0, 8).map((p, i) => `
+        <div class="protocol-item">
+            <span class="protocol-color" style="background: ${colors[i % colors.length]}"></span>
+            <span class="protocol-name">${p.protocol}</span>
+            <span class="protocol-count">${p.count.toLocaleString()}</span>
+        </div>
+    `).join('');
+}
+
+function formatTimeLabel(ms) {
+    if (ms < 1000) return `${ms}ms`;
+    if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+    return `${(ms / 60000).toFixed(1)}m`;
+}
+
+function formatDuration(ms) {
+    if (ms < 1000) return `${ms}ms`;
+    if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+    if (ms < 3600000) return `${(ms / 60000).toFixed(1)}m`;
+    return `${(ms / 3600000).toFixed(1)}h`;
+}
+
+function formatBytes(bytes) {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+    return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
+}
+
+function startIoGraphRefresh() {
+    const autoRefresh = document.getElementById('iograph-auto-refresh');
+    if (autoRefresh && autoRefresh.checked) {
+        fetchIoGraphData();
+        ioGraphRefreshTimer = setInterval(fetchIoGraphData, 2000);
+    }
+}
+
+function stopIoGraphRefresh() {
+    if (ioGraphRefreshTimer) {
+        clearInterval(ioGraphRefreshTimer);
+        ioGraphRefreshTimer = null;
+    }
+}
+
+// ============================================
+// Interval/RTT Data (Wireshark-style)
+// ============================================
+
+let intervalRefreshTimer = null;
+
+async function fetchIntervalData() {
+    try {
+        const response = await fetch(`${API_BASE}/api/intervals?limit=200`);
+        const result = await response.json();
+
+        if (result.success && result.data) {
+            updateIntervalDisplay(result.data);
+        }
+    } catch (error) {
+        console.error('Failed to fetch interval data:', error);
+    }
+}
+
+function updateIntervalDisplay(data) {
+    // Update interval statistics
+    const stats = data.interval_stats;
+    if (stats) {
+        document.getElementById('interval-min').textContent = formatMicroseconds(stats.min_us);
+        document.getElementById('interval-avg').textContent = formatMicroseconds(stats.avg_us);
+        document.getElementById('interval-max').textContent = formatMicroseconds(stats.max_us);
+        document.getElementById('interval-p95').textContent = formatMicroseconds(stats.percentile_95_us);
+        document.getElementById('interval-stddev').textContent = formatMicroseconds(stats.std_dev_us);
+        document.getElementById('interval-count').textContent = stats.count.toLocaleString();
+    }
+
+    // Update RTT statistics
+    const rttStats = data.rtt_stats;
+    if (rttStats) {
+        document.getElementById('rtt-min').textContent = formatMicroseconds(rttStats.min_us);
+        document.getElementById('rtt-avg').textContent = formatMicroseconds(rttStats.avg_us);
+        document.getElementById('rtt-max').textContent = formatMicroseconds(rttStats.max_us);
+        document.getElementById('rtt-p95').textContent = formatMicroseconds(rttStats.percentile_95_us);
+        document.getElementById('rtt-count').textContent = rttStats.count.toLocaleString();
+    } else {
+        document.getElementById('rtt-min').textContent = '-';
+        document.getElementById('rtt-avg').textContent = '-';
+        document.getElementById('rtt-max').textContent = '-';
+        document.getElementById('rtt-p95').textContent = '-';
+        document.getElementById('rtt-count').textContent = '0';
+    }
+
+    // Update interval chart
+    if (state.charts.interval && data.intervals && data.intervals.length > 0) {
+        const labels = data.intervals.map((_, i) => i + 1);
+        const values = data.intervals.map(s => s.delta_us);
+
+        state.charts.interval.data.labels = labels;
+        state.charts.interval.data.datasets[0].data = values;
+        state.charts.interval.update('none');
+    }
+
+    // Update RTT chart
+    if (state.charts.rtt && data.rtt_samples && data.rtt_samples.length > 0) {
+        const labels = data.rtt_samples.map((_, i) => i + 1);
+        const values = data.rtt_samples.map(s => s.rtt_us);
+
+        state.charts.rtt.data.labels = labels;
+        state.charts.rtt.data.datasets[0].data = values;
+        state.charts.rtt.update('none');
+    }
+}
+
+function formatMicroseconds(us) {
+    if (us === undefined || us === null || isNaN(us)) return '-';
+    if (us < 1000) return `${us.toFixed(1)}μs`;
+    if (us < 1000000) return `${(us / 1000).toFixed(2)}ms`;
+    return `${(us / 1000000).toFixed(2)}s`;
+}
+
+function startIntervalRefresh() {
+    const autoRefresh = document.getElementById('auto-refresh-intervals');
+    if (autoRefresh && autoRefresh.checked) {
+        fetchIntervalData();
+        intervalRefreshTimer = setInterval(fetchIntervalData, 2000);
+    }
+}
+
+function stopIntervalRefresh() {
+    if (intervalRefreshTimer) {
+        clearInterval(intervalRefreshTimer);
+        intervalRefreshTimer = null;
     }
 }
 

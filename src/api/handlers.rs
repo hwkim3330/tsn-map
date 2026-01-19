@@ -171,6 +171,148 @@ pub async fn get_capture_stats(
     })
 }
 
+// GET /api/intervals - Packet intervals and RTT data (Wireshark-style)
+#[derive(Deserialize)]
+pub struct IntervalsParams {
+    pub limit: Option<usize>,
+}
+
+pub async fn get_intervals(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<IntervalsParams>,
+) -> Json<ApiResponse<capture::IntervalData>> {
+    let capture = state.capture_manager.read().await;
+    let limit = params.limit.unwrap_or(200).min(1000);
+    let data = capture.get_interval_data(limit);
+    Json(ApiResponse::success(data))
+}
+
+// GET /api/iograph - IO Graph data (Wireshark-style time vs packets/bytes)
+#[derive(Deserialize)]
+pub struct IoGraphParams {
+    pub interval_ms: Option<u64>,  // Time bucket size in milliseconds
+}
+
+#[derive(Serialize)]
+pub struct IoGraphData {
+    pub buckets: Vec<IoGraphBucket>,
+    pub total_packets: u64,
+    pub total_bytes: u64,
+    pub duration_ms: u64,
+    pub avg_pps: f64,
+    pub peak_pps: u64,
+    pub protocols: Vec<ProtocolCount>,
+}
+
+#[derive(Serialize)]
+pub struct IoGraphBucket {
+    pub time_ms: u64,       // Time offset from start
+    pub packets: u64,
+    pub bytes: u64,
+}
+
+#[derive(Serialize)]
+pub struct ProtocolCount {
+    pub protocol: String,
+    pub count: u64,
+    pub bytes: u64,
+}
+
+pub async fn get_iograph(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<IoGraphParams>,
+) -> Json<ApiResponse<IoGraphData>> {
+    let capture = state.capture_manager.read().await;
+    let interval_ms = params.interval_ms.unwrap_or(100).max(1).min(60000);
+
+    let packets = capture.get_packets(0, capture.get_packet_count());
+
+    if packets.is_empty() {
+        return Json(ApiResponse::success(IoGraphData {
+            buckets: vec![],
+            total_packets: 0,
+            total_bytes: 0,
+            duration_ms: 0,
+            avg_pps: 0.0,
+            peak_pps: 0,
+            protocols: vec![],
+        }));
+    }
+
+    // Find time range
+    let start_time = packets.first().unwrap().timestamp;
+    let end_time = packets.last().unwrap().timestamp;
+    let duration_ms = (end_time - start_time).num_milliseconds().max(1) as u64;
+
+    // Create time buckets
+    let num_buckets = ((duration_ms / interval_ms) + 1) as usize;
+    let mut bucket_packets: Vec<u64> = vec![0; num_buckets];
+    let mut bucket_bytes: Vec<u64> = vec![0; num_buckets];
+
+    // Protocol counts
+    let mut protocol_map: std::collections::HashMap<String, (u64, u64)> = std::collections::HashMap::new();
+
+    let mut total_packets = 0u64;
+    let mut total_bytes = 0u64;
+
+    for pkt in &packets {
+        let offset_ms = (pkt.timestamp - start_time).num_milliseconds().max(0) as u64;
+        let bucket_idx = (offset_ms / interval_ms) as usize;
+
+        if bucket_idx < num_buckets {
+            bucket_packets[bucket_idx] += 1;
+            bucket_bytes[bucket_idx] += pkt.length as u64;
+        }
+
+        total_packets += 1;
+        total_bytes += pkt.length as u64;
+
+        // Count protocols
+        let proto = pkt.info.protocol.as_ref()
+            .map(|s| s.clone())
+            .unwrap_or_else(|| pkt.info.ethertype_name.clone());
+        let entry = protocol_map.entry(proto).or_insert((0, 0));
+        entry.0 += 1;
+        entry.1 += pkt.length as u64;
+    }
+
+    // Build buckets
+    let buckets: Vec<IoGraphBucket> = bucket_packets.iter().enumerate().map(|(i, &packets)| {
+        IoGraphBucket {
+            time_ms: i as u64 * interval_ms,
+            packets,
+            bytes: bucket_bytes[i],
+        }
+    }).collect();
+
+    // Find peak PPS
+    let peak_pps = bucket_packets.iter().cloned().max().unwrap_or(0) * (1000 / interval_ms);
+
+    // Calculate average PPS
+    let duration_secs = duration_ms as f64 / 1000.0;
+    let avg_pps = if duration_secs > 0.0 {
+        total_packets as f64 / duration_secs
+    } else {
+        0.0
+    };
+
+    // Build protocol list (sorted by count)
+    let mut protocols: Vec<ProtocolCount> = protocol_map.into_iter()
+        .map(|(protocol, (count, bytes))| ProtocolCount { protocol, count, bytes })
+        .collect();
+    protocols.sort_by(|a, b| b.count.cmp(&a.count));
+
+    Json(ApiResponse::success(IoGraphData {
+        buckets,
+        total_packets,
+        total_bytes,
+        duration_ms,
+        avg_pps,
+        peak_pps,
+        protocols,
+    }))
+}
+
 // GET /api/packets
 pub async fn get_packets(
     State(state): State<Arc<AppState>>,

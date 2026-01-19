@@ -1,12 +1,15 @@
 mod packet;
 mod pcap_handler;
+mod interval;
 
 pub use packet::{CapturedPacket, TsnType, PtpInfo};
 pub use pcap_handler::PcapHandler;
+pub use interval::{IntervalTracker, IntervalData, IntervalStats, IntervalSample, RttSample};
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::sync::broadcast;
 use pcap::Device;
 use chrono::{DateTime, Utc};
@@ -47,6 +50,7 @@ pub struct CaptureManager {
     packet_sender: broadcast::Sender<CapturedPacket>,
     packets_captured: Arc<AtomicU64>,
     bytes_captured: Arc<AtomicU64>,
+    interval_tracker: IntervalTracker,
 }
 
 impl CaptureManager {
@@ -62,6 +66,7 @@ impl CaptureManager {
             packet_sender,
             packets_captured: Arc::new(AtomicU64::new(0)),
             bytes_captured: Arc::new(AtomicU64::new(0)),
+            interval_tracker: IntervalTracker::new(),
         })
     }
 
@@ -120,6 +125,51 @@ impl CaptureManager {
             self.stats.ptp_packets += 1;
         }
 
+        // Track packet intervals and TCP RTT
+        let is_tcp = packet.info.protocol.as_deref() == Some("TCP");
+        let tcp_flags_ack = packet.info.tcp_flags.as_ref().map(|f| f.ack).unwrap_or(false);
+
+        // Calculate TCP payload length
+        let payload_len = if is_tcp {
+            // Approximate: total length - headers (14 eth + 20 ip + 20 tcp minimum)
+            packet.length.saturating_sub(54)
+        } else {
+            0
+        };
+
+        // Format source and destination for display
+        let src = packet.info.src_ip.as_ref()
+            .map(|ip| {
+                packet.info.src_port.map(|p| format!("{}:{}", ip, p))
+                    .unwrap_or_else(|| ip.clone())
+            })
+            .unwrap_or_else(|| packet.info.src_mac.clone());
+        let dst = packet.info.dst_ip.as_ref()
+            .map(|ip| {
+                packet.info.dst_port.map(|p| format!("{}:{}", ip, p))
+                    .unwrap_or_else(|| ip.clone())
+            })
+            .unwrap_or_else(|| packet.info.dst_mac.clone());
+
+        self.interval_tracker.process_packet(
+            packet.id,
+            packet.timestamp,
+            Instant::now(),  // capture instant
+            packet.length,
+            &src,
+            &dst,
+            packet.info.protocol.as_deref().unwrap_or(&packet.info.ethertype_name),
+            packet.info.src_ip.as_deref(),
+            packet.info.dst_ip.as_deref(),
+            packet.info.src_port,
+            packet.info.dst_port,
+            is_tcp,
+            packet.info.seq_num,
+            packet.info.ack_num,
+            tcp_flags_ack,
+            payload_len,
+        );
+
         // Broadcast to subscribers
         let _ = self.packet_sender.send(packet.clone());
 
@@ -157,6 +207,12 @@ impl CaptureManager {
     pub fn clear_packets(&mut self) {
         self.packets.clear();
         self.stats = CaptureStats::default();
+        self.interval_tracker.reset();
+    }
+
+    /// Get interval and RTT data for API
+    pub fn get_interval_data(&self, limit: usize) -> IntervalData {
+        self.interval_tracker.get_data(limit)
     }
 }
 

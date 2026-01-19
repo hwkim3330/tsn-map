@@ -208,6 +208,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/capture/start", post(api::handlers::start_capture))
         .route("/api/capture/stop", post(api::handlers::stop_capture))
         .route("/api/capture/stats", get(api::handlers::get_capture_stats))
+        .route("/api/intervals", get(api::handlers::get_intervals))
+        .route("/api/iograph", get(api::handlers::get_iograph))
         .route("/api/packets", get(api::handlers::get_packets))
         .route("/api/packets/stream", get(api::handlers::packet_stream))
         .route("/api/topology", get(api::handlers::get_topology))

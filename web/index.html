@@ -124,6 +124,10 @@
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                         Detail
                     </button>
+                    <button class="tab" data-tab="iograph">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                        IO Graph
+                    </button>
                     <button class="tab" data-tab="latency">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                         Latency
@@ -243,8 +247,140 @@
                     </div>
                 </div>
 
+                <!-- IO Graph Tab (Wireshark-style) -->
+                <div class="tab-content" id="tab-iograph">
+                    <div class="iograph-container">
+                        <div class="iograph-toolbar">
+                            <div class="toolbar-group">
+                                <label>Interval:</label>
+                                <select id="iograph-interval">
+                                    <option value="10">10ms</option>
+                                    <option value="100" selected>100ms</option>
+                                    <option value="1000">1s</option>
+                                    <option value="10000">10s</option>
+                                </select>
+                            </div>
+                            <div class="toolbar-group">
+                                <label>Y-Axis:</label>
+                                <select id="iograph-yaxis">
+                                    <option value="packets" selected>Packets</option>
+                                    <option value="bytes">Bytes</option>
+                                    <option value="bits">Bits</option>
+                                </select>
+                            </div>
+                            <div class="toolbar-group">
+                                <button id="btn-iograph-refresh" class="btn btn-small btn-primary">Refresh</button>
+                                <label class="toggle"><input type="checkbox" id="iograph-auto-refresh"> Auto</label>
+                            </div>
+                        </div>
+                        <div class="iograph-stats">
+                            <div class="stat-box compact">
+                                <div class="stat-value" id="io-total-packets">0</div>
+                                <div class="stat-label">Total Packets</div>
+                            </div>
+                            <div class="stat-box compact">
+                                <div class="stat-value" id="io-total-bytes">0</div>
+                                <div class="stat-label">Total Bytes</div>
+                            </div>
+                            <div class="stat-box compact">
+                                <div class="stat-value" id="io-avg-pps">0</div>
+                                <div class="stat-label">Avg PPS</div>
+                            </div>
+                            <div class="stat-box compact">
+                                <div class="stat-value" id="io-peak-pps">0</div>
+                                <div class="stat-label">Peak PPS</div>
+                            </div>
+                            <div class="stat-box compact">
+                                <div class="stat-value" id="io-duration">0s</div>
+                                <div class="stat-label">Duration</div>
+                            </div>
+                        </div>
+                        <div class="iograph-chart-container">
+                            <canvas id="iograph-chart"></canvas>
+                        </div>
+                        <div class="iograph-protocol-breakdown">
+                            <h4>Protocol Breakdown</h4>
+                            <div class="protocol-legend" id="protocol-legend"></div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Latency Test Tab -->
                 <div class="tab-content" id="tab-latency">
+                    <!-- Packet Interval Section (Wireshark-style) -->
+                    <div class="interval-section">
+                        <div class="interval-header">
+                            <h4><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Packet Interval (Delta Time)</h4>
+                            <div class="interval-controls">
+                                <button id="btn-refresh-intervals" class="btn btn-small">Refresh</button>
+                                <label class="toggle"><input type="checkbox" id="auto-refresh-intervals" checked> Auto</label>
+                            </div>
+                        </div>
+                        <div class="interval-stats-row">
+                            <div class="stat-box compact">
+                                <div class="stat-value" id="interval-min">-</div>
+                                <div class="stat-label">Min</div>
+                            </div>
+                            <div class="stat-box compact">
+                                <div class="stat-value" id="interval-avg">-</div>
+                                <div class="stat-label">Avg</div>
+                            </div>
+                            <div class="stat-box compact">
+                                <div class="stat-value" id="interval-max">-</div>
+                                <div class="stat-label">Max</div>
+                            </div>
+                            <div class="stat-box compact">
+                                <div class="stat-value" id="interval-p95">-</div>
+                                <div class="stat-label">P95</div>
+                            </div>
+                            <div class="stat-box compact">
+                                <div class="stat-value" id="interval-stddev">-</div>
+                                <div class="stat-label">StdDev</div>
+                            </div>
+                            <div class="stat-box compact">
+                                <div class="stat-value" id="interval-count">0</div>
+                                <div class="stat-label">Samples</div>
+                            </div>
+                        </div>
+                        <div class="interval-chart-row">
+                            <div class="chart-card">
+                                <h4>Inter-Packet Arrival Time</h4>
+                                <div class="chart-wrapper-medium">
+                                    <canvas id="interval-chart"></canvas>
+                                </div>
+                            </div>
+                            <div class="chart-card">
+                                <h4>TCP RTT (from ACK)</h4>
+                                <div class="chart-wrapper-medium">
+                                    <canvas id="rtt-chart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="rtt-stats-row">
+                            <div class="stat-box compact">
+                                <div class="stat-value" id="rtt-min">-</div>
+                                <div class="stat-label">RTT Min</div>
+                            </div>
+                            <div class="stat-box compact">
+                                <div class="stat-value" id="rtt-avg">-</div>
+                                <div class="stat-label">RTT Avg</div>
+                            </div>
+                            <div class="stat-box compact">
+                                <div class="stat-value" id="rtt-max">-</div>
+                                <div class="stat-label">RTT Max</div>
+                            </div>
+                            <div class="stat-box compact">
+                                <div class="stat-value" id="rtt-p95">-</div>
+                                <div class="stat-label">RTT P95</div>
+                            </div>
+                            <div class="stat-box compact">
+                                <div class="stat-value" id="rtt-count">0</div>
+                                <div class="stat-label">RTT Samples</div>
+                            </div>
+                        </div>
+                    </div>
+                    <hr class="section-divider">
+                    <!-- Ping Test Section -->
                     <div class="test-layout">
                         <div class="test-controls">
                             <h4><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Latency Test (Ping)</h4>
@@ -295,7 +431,7 @@
                         </div>
                         <div class="test-chart-area">
                             <div class="chart-card full-height">
-                                <h4>Latency Over Time</h4>
+                                <h4>Ping Latency</h4>
                                 <div class="chart-wrapper-large">
                                     <canvas id="latency-chart"></canvas>
                                 </div>
