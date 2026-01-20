@@ -18,6 +18,21 @@
 
 ---
 
+## Demo
+
+[**Watch Demo Video (45s)**](tsn-map-demo-v2.mp4)
+
+<p align="center">
+  <img src="pic/Screenshot from 2026-01-20 10-29-30.png" alt="Topology" width="45%">
+  <img src="pic/Screenshot from 2026-01-20 10-29-57.png" alt="Statistics" width="45%">
+</p>
+<p align="center">
+  <img src="pic/Screenshot from 2026-01-20 10-30-16.png" alt="IO Graph" width="45%">
+  <img src="pic/Screenshot from 2026-01-19 15-18-44.png" alt="Tester" width="45%">
+</p>
+
+---
+
 ## Features
 
 - **Real-time Packet Capture** - Live packet capture with libpcap, protocol detection, and color-coded display
