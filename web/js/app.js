@@ -52,10 +52,7 @@ function initializeUI() {
             tab.classList.add('active');
             document.getElementById(`tab-${tab.dataset.tab}`).classList.add('active');
 
-            // Stop auto-refresh when leaving tabs
-            if (tab.dataset.tab !== 'latency') {
-                stopIntervalRefresh();
-            }
+            // Stop auto-refresh when leaving IO Graph tab
             if (tab.dataset.tab !== 'iograph') {
                 stopIoGraphRefresh();
             }
@@ -79,21 +76,11 @@ function initializeUI() {
                 }
                 fetchIoGraphData();
                 startIoGraphRefresh();
-            } else if (tab.dataset.tab === 'latency') {
+            } else if (tab.dataset.tab === 'tester') {
                 // Resize charts when tab becomes visible
                 if (state.charts.latency) {
                     setTimeout(() => state.charts.latency.resize(), 100);
                 }
-                if (state.charts.interval) {
-                    setTimeout(() => state.charts.interval.resize(), 100);
-                }
-                if (state.charts.rtt) {
-                    setTimeout(() => state.charts.rtt.resize(), 100);
-                }
-                // Start interval auto-refresh
-                startIntervalRefresh();
-            } else if (tab.dataset.tab === 'throughput') {
-                // Resize chart when tab becomes visible
                 if (state.charts.throughput) {
                     setTimeout(() => state.charts.throughput.resize(), 100);
                 }
@@ -155,16 +142,6 @@ function setupEventListeners() {
     document.getElementById('btn-throughput-start')?.addEventListener('click', startThroughputTest);
     document.getElementById('btn-cbs-apply')?.addEventListener('click', applyCbsConfig);
     document.getElementById('btn-tas-apply')?.addEventListener('click', applyTasConfig);
-
-    // Interval/RTT controls
-    document.getElementById('btn-refresh-intervals')?.addEventListener('click', fetchIntervalData);
-    document.getElementById('auto-refresh-intervals')?.addEventListener('change', (e) => {
-        if (e.target.checked) {
-            startIntervalRefresh();
-        } else {
-            stopIntervalRefresh();
-        }
-    });
 
     // IO Graph controls
     document.getElementById('btn-iograph-refresh')?.addEventListener('click', fetchIoGraphData);
@@ -1990,53 +1967,6 @@ function initializeTestCharts() {
         });
     }
 
-    // Packet Interval Chart (Wireshark-style delta time)
-    const intervalCtx = document.getElementById('interval-chart');
-    if (intervalCtx) {
-        state.charts.interval = new Chart(intervalCtx.getContext('2d'), {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: 'Delta (μs)',
-                    data: [],
-                    borderColor: '#ff9f0a',
-                    backgroundColor: 'rgba(255, 159, 10, 0.1)',
-                    tension: 0,
-                    fill: true,
-                    pointRadius: 1,
-                    pointHoverRadius: 4,
-                    borderWidth: 1.5
-                }]
-            },
-            options: {
-                ...chartOptions,
-                plugins: {
-                    ...chartOptions.plugins,
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            label: (ctx) => `${ctx.parsed.y.toFixed(1)} μs`
-                        }
-                    }
-                },
-                scales: {
-                    x: {
-                        grid: { color: '#30363d' },
-                        ticks: { color: '#8b949e', maxRotation: 0, maxTicksLimit: 10 },
-                        title: { display: true, text: 'Packet #', color: '#8b949e' }
-                    },
-                    y: {
-                        grid: { color: '#30363d' },
-                        ticks: { color: '#8b949e' },
-                        beginAtZero: true,
-                        title: { display: true, text: 'μs', color: '#8b949e' }
-                    }
-                }
-            }
-        });
-    }
-
     // IO Graph Chart (Wireshark-style)
     const iographCtx = document.getElementById('iograph-chart');
     if (iographCtx) {
@@ -2077,53 +2007,6 @@ function initializeTestCharts() {
                         ticks: { color: '#8b949e' },
                         beginAtZero: true,
                         title: { display: true, text: 'Packets', color: '#8b949e' }
-                    }
-                }
-            }
-        });
-    }
-
-    // TCP RTT Chart
-    const rttCtx = document.getElementById('rtt-chart');
-    if (rttCtx) {
-        state.charts.rtt = new Chart(rttCtx.getContext('2d'), {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: 'RTT (μs)',
-                    data: [],
-                    borderColor: '#bf5af2',
-                    backgroundColor: 'rgba(191, 90, 242, 0.1)',
-                    tension: 0,
-                    fill: true,
-                    pointRadius: 2,
-                    pointHoverRadius: 5,
-                    borderWidth: 1.5
-                }]
-            },
-            options: {
-                ...chartOptions,
-                plugins: {
-                    ...chartOptions.plugins,
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            label: (ctx) => `${ctx.parsed.y.toFixed(1)} μs`
-                        }
-                    }
-                },
-                scales: {
-                    x: {
-                        grid: { color: '#30363d' },
-                        ticks: { color: '#8b949e', maxRotation: 0, maxTicksLimit: 10 },
-                        title: { display: true, text: 'Sample #', color: '#8b949e' }
-                    },
-                    y: {
-                        grid: { color: '#30363d' },
-                        ticks: { color: '#8b949e' },
-                        beginAtZero: true,
-                        title: { display: true, text: 'μs', color: '#8b949e' }
                     }
                 }
             }

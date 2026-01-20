@@ -1881,6 +1881,69 @@ body.col-resizing * {
     font-family: 'SF Mono', Menlo, monospace;
 }
 
+/* Tester Tab Grid Layout */
+.tester-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    height: 100%;
+}
+
+.tester-section {
+    background: var(--bg-card);
+    border-radius: 16px;
+    padding: 20px;
+    border: 1px solid var(--border-light);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.tester-section h4 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: 0.95em;
+    color: var(--text-primary);
+}
+
+.test-stats-compact {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.test-stats-compact .stat-item {
+    display: flex;
+    gap: 6px;
+    font-size: 0.85em;
+}
+
+.test-stats-compact .stat-label {
+    color: var(--text-secondary);
+}
+
+.test-stats-compact .stat-item span:last-child {
+    color: var(--accent-primary);
+    font-family: 'SF Mono', Menlo, monospace;
+    font-weight: 500;
+}
+
+.chart-wrapper-small {
+    flex: 1;
+    min-height: 150px;
+    position: relative;
+}
+
+.chart-wrapper-small canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100% !important;
+    height: 100% !important;
+}
+
 /* Responsive */
 @media (max-width: 1200px) {
     .stats-grid-2x2 {

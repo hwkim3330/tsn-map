@@ -23,9 +23,11 @@
 - **Real-time Packet Capture** - Live packet capture with libpcap, protocol detection, and color-coded display
 - **Network Topology** - Interactive D3.js force-directed graph with automatic device discovery
 - **Traffic Statistics** - Real-time charts for bandwidth, protocol distribution, and packet rates
-- **Latency Testing** - ICMP ping with live RTT graph (SSE streaming)
-- **Throughput Testing** - UDP bandwidth measurement with real-time Mbps chart
-- **PCAP Support** - Save and load pcap files for offline analysis
+- **IO Graph** - Wireshark-style time vs packets/bytes/bits graph with adjustable intervals (1ms ~ 10s)
+- **Tester** - Integrated testing tools (Ping latency test + Packet Generator)
+- **TSN Support** - CBS (Credit-Based Shaper) and TAS (Time-Aware Shaper) configuration
+- **PCAP Support** - Save/load/upload/download pcap files for offline analysis
+- **Display Filter** - Wireshark-style filter syntax (tcp, udp, ip.addr==x.x.x.x, port==80, etc.)
 - **Vendor Detection** - OUI-based MAC vendor identification
 
 ## Quick Start
@@ -79,14 +81,14 @@ tsn-map/
 ├── src/
 │   ├── main.rs          # Axum web server + routes
 │   ├── capture/         # Packet capture (libpcap/pcap crate)
-│   ├── protocols/       # Protocol parsing (Ethernet, IP, TCP, UDP, etc.)
-│   ├── topology/        # Network graph (petgraph) + OUI lookup
-│   ├── tester/          # Latency (ICMP) + Throughput (UDP) testers
+│   ├── protocols/       # Protocol parsing (Ethernet, IP, TCP, UDP, LLDP, PTP, etc.)
+│   ├── topology/        # Network graph (petgraph) + OUI lookup + LLDP discovery
+│   ├── tester/          # Ping (ICMP) + Throughput (UDP) + Packet Generator
 │   └── api/             # REST API + SSE handlers
 └── web/
     ├── index.html       # Single-page application
-    ├── js/app.js        # Frontend logic
-    └── css/style.css    # Dark theme styling
+    ├── js/app.js        # Frontend logic + Chart.js visualization
+    └── css/style.css    # Hybrid theme (white header + dark content)
 ```
 
 ## Filter Syntax
@@ -118,12 +120,23 @@ tcp && port==443
 | GET | `/api/packets` | Get captured packets (paginated) |
 | GET | `/api/packets/stream` | SSE real-time packet stream |
 | GET | `/api/topology` | Network topology (nodes + links) |
-| GET | `/api/stats` | Traffic statistics |
+| POST | `/api/topology/scan` | Scan network topology |
+| GET | `/api/iograph` | IO graph data |
+| GET | `/api/tsn/flows` | TSN flow information |
+| GET | `/api/tsn/streams` | TSN stream information |
 | GET | `/api/interfaces` | Available network interfaces |
+| POST | `/api/interface/set` | Set capture interface |
+| POST | `/api/pcap/save` | Save capture to file |
+| POST | `/api/pcap/load` | Load capture from file |
+| POST | `/api/pcap/download` | Download pcap file |
+| POST | `/api/pcap/upload` | Upload pcap file |
 | POST | `/api/test/ping` | Run ping test |
 | GET | `/api/test/ping/stream` | SSE streaming ping test |
 | POST | `/api/test/throughput` | Run throughput test |
 | GET | `/api/test/throughput/stream` | SSE streaming throughput test |
+| GET | `/api/test/pktgen/stream` | Packet generator stream |
+| POST | `/api/tsn/cbs` | Configure CBS (Credit-Based Shaper) |
+| POST | `/api/tsn/tas` | Configure TAS (Time-Aware Shaper) |
 
 ## Tech Stack
 

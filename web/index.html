@@ -128,11 +128,7 @@
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
                         IO Graph
                     </button>
-                    <button class="tab" data-tab="latency">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                        Latency
-                    </button>
-                    <button class="tab" data-tab="throughput">
+                    <button class="tab" data-tab="tester">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
                         Tester
                     </button>
@@ -308,89 +304,16 @@
                     </div>
                 </div>
 
-                <!-- Latency Test Tab -->
-                <div class="tab-content" id="tab-latency">
-                    <!-- Packet Interval Section (Wireshark-style) -->
-                    <div class="interval-section">
-                        <div class="interval-header">
-                            <h4><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Packet Interval (Delta Time)</h4>
-                            <div class="interval-controls">
-                                <button id="btn-refresh-intervals" class="btn btn-small">Refresh</button>
-                                <label class="toggle"><input type="checkbox" id="auto-refresh-intervals" checked> Auto</label>
-                            </div>
-                        </div>
-                        <div class="interval-stats-row">
-                            <div class="stat-box compact">
-                                <div class="stat-value" id="interval-min">-</div>
-                                <div class="stat-label">Min</div>
-                            </div>
-                            <div class="stat-box compact">
-                                <div class="stat-value" id="interval-avg">-</div>
-                                <div class="stat-label">Avg</div>
-                            </div>
-                            <div class="stat-box compact">
-                                <div class="stat-value" id="interval-max">-</div>
-                                <div class="stat-label">Max</div>
-                            </div>
-                            <div class="stat-box compact">
-                                <div class="stat-value" id="interval-p95">-</div>
-                                <div class="stat-label">P95</div>
-                            </div>
-                            <div class="stat-box compact">
-                                <div class="stat-value" id="interval-stddev">-</div>
-                                <div class="stat-label">StdDev</div>
-                            </div>
-                            <div class="stat-box compact">
-                                <div class="stat-value" id="interval-count">0</div>
-                                <div class="stat-label">Samples</div>
-                            </div>
-                        </div>
-                        <div class="interval-chart-row">
-                            <div class="chart-card">
-                                <h4>Inter-Packet Arrival Time</h4>
-                                <div class="chart-wrapper-medium">
-                                    <canvas id="interval-chart"></canvas>
-                                </div>
-                            </div>
-                            <div class="chart-card">
-                                <h4>TCP RTT (from ACK)</h4>
-                                <div class="chart-wrapper-medium">
-                                    <canvas id="rtt-chart"></canvas>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="rtt-stats-row">
-                            <div class="stat-box compact">
-                                <div class="stat-value" id="rtt-min">-</div>
-                                <div class="stat-label">RTT Min</div>
-                            </div>
-                            <div class="stat-box compact">
-                                <div class="stat-value" id="rtt-avg">-</div>
-                                <div class="stat-label">RTT Avg</div>
-                            </div>
-                            <div class="stat-box compact">
-                                <div class="stat-value" id="rtt-max">-</div>
-                                <div class="stat-label">RTT Max</div>
-                            </div>
-                            <div class="stat-box compact">
-                                <div class="stat-value" id="rtt-p95">-</div>
-                                <div class="stat-label">RTT P95</div>
-                            </div>
-                            <div class="stat-box compact">
-                                <div class="stat-value" id="rtt-count">0</div>
-                                <div class="stat-label">RTT Samples</div>
-                            </div>
-                        </div>
-                    </div>
-                    <hr class="section-divider">
-                    <!-- Ping Test Section -->
-                    <div class="test-layout">
-                        <div class="test-controls">
-                            <h4><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Latency Test (Ping)</h4>
+                <!-- Tester Tab (Ping + Packet Generator) -->
+                <div class="tab-content" id="tab-tester">
+                    <div class="tester-grid">
+                        <!-- Ping Section -->
+                        <div class="tester-section">
+                            <h4><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Ping Test</h4>
                             <div class="tester-form">
                                 <div class="form-group">
-                                    <label>Target Host</label>
-                                    <input type="text" id="ping-target" placeholder="192.168.1.1 or hostname">
+                                    <label>Target</label>
+                                    <input type="text" id="ping-target" placeholder="192.168.1.1">
                                 </div>
                                 <div class="form-row">
                                     <div class="form-group">
@@ -398,55 +321,27 @@
                                         <input type="number" id="ping-count" value="10" min="1" max="100">
                                     </div>
                                     <div class="form-group">
-                                        <label>Interval (ms)</label>
+                                        <label>Interval</label>
                                         <input type="number" id="ping-interval" value="200" min="10" max="10000">
                                     </div>
                                 </div>
-                                <div class="btn-group">
-                                    <button id="btn-ping-start" class="btn btn-primary">
-                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-                                        ICMP Ping
-                                    </button>
-                                    <button id="btn-hwping-start" class="btn btn-secondary" title="Hardware-timestamped UDP ping">
-                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                                        HW Ping
-                                    </button>
-                                </div>
+                                <button id="btn-ping-start" class="btn btn-primary btn-full">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                                    ICMP Ping
+                                </button>
                             </div>
-                            <div class="test-stats" id="ping-stats">
-                                <div class="stat-box">
-                                    <div class="stat-value" id="ping-min">-</div>
-                                    <div class="stat-label">Min (ms)</div>
-                                </div>
-                                <div class="stat-box">
-                                    <div class="stat-value" id="ping-avg">-</div>
-                                    <div class="stat-label">Avg (ms)</div>
-                                </div>
-                                <div class="stat-box">
-                                    <div class="stat-value" id="ping-max">-</div>
-                                    <div class="stat-label">Max (ms)</div>
-                                </div>
-                                <div class="stat-box">
-                                    <div class="stat-value" id="ping-loss">-</div>
-                                    <div class="stat-label">Loss %</div>
-                                </div>
+                            <div class="test-stats-compact">
+                                <div class="stat-item"><span class="stat-label">Min:</span><span id="ping-min">-</span></div>
+                                <div class="stat-item"><span class="stat-label">Avg:</span><span id="ping-avg">-</span></div>
+                                <div class="stat-item"><span class="stat-label">Max:</span><span id="ping-max">-</span></div>
+                                <div class="stat-item"><span class="stat-label">Loss:</span><span id="ping-loss">-</span></div>
+                            </div>
+                            <div class="chart-wrapper-small">
+                                <canvas id="latency-chart"></canvas>
                             </div>
                         </div>
-                        <div class="test-chart-area">
-                            <div class="chart-card full-height">
-                                <h4>Ping Latency</h4>
-                                <div class="chart-wrapper-large">
-                                    <canvas id="latency-chart"></canvas>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Throughput Test Tab -->
-                <div class="tab-content" id="tab-throughput">
-                    <div class="test-layout">
-                        <div class="test-controls">
+                        <!-- Packet Generator Section -->
+                        <div class="tester-section">
                             <h4><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> Packet Generator</h4>
                             <div class="tester-form">
                                 <div class="form-group">
@@ -455,17 +350,17 @@
                                 </div>
                                 <div class="form-row">
                                     <div class="form-group">
-                                        <label>Duration (s)</label>
+                                        <label>Duration</label>
                                         <input type="number" id="throughput-duration" value="10" min="1" max="60">
                                     </div>
                                     <div class="form-group">
-                                        <label>Packet Size</label>
+                                        <label>Size</label>
                                         <input type="number" id="throughput-pktsize" value="1024" min="64" max="1500">
                                     </div>
                                 </div>
                                 <div class="form-row">
                                     <div class="form-group">
-                                        <label>Rate (pps)</label>
+                                        <label>PPS</label>
                                         <input type="number" id="throughput-pps" value="1000" min="1" max="100000">
                                     </div>
                                     <div class="form-group">
@@ -475,34 +370,17 @@
                                 </div>
                                 <button id="btn-throughput-start" class="btn btn-primary btn-full">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-                                    Start Packet Generation
+                                    Start
                                 </button>
                             </div>
-                            <div class="test-stats" id="throughput-stats">
-                                <div class="stat-box">
-                                    <div class="stat-value" id="tp-bandwidth">-</div>
-                                    <div class="stat-label">Mbps</div>
-                                </div>
-                                <div class="stat-box">
-                                    <div class="stat-value" id="tp-packets">-</div>
-                                    <div class="stat-label">Packets TX</div>
-                                </div>
-                                <div class="stat-box">
-                                    <div class="stat-value" id="tp-pps">-</div>
-                                    <div class="stat-label">PPS</div>
-                                </div>
-                                <div class="stat-box">
-                                    <div class="stat-value" id="tp-bytes">-</div>
-                                    <div class="stat-label">Bytes TX</div>
-                                </div>
+                            <div class="test-stats-compact">
+                                <div class="stat-item"><span class="stat-label">Mbps:</span><span id="tp-bandwidth">-</span></div>
+                                <div class="stat-item"><span class="stat-label">PPS:</span><span id="tp-pps">-</span></div>
+                                <div class="stat-item"><span class="stat-label">TX:</span><span id="tp-packets">-</span></div>
+                                <div class="stat-item"><span class="stat-label">Bytes:</span><span id="tp-bytes">-</span></div>
                             </div>
-                        </div>
-                        <div class="test-chart-area">
-                            <div class="chart-card full-height">
-                                <h4>Throughput Over Time</h4>
-                                <div class="chart-wrapper-large">
-                                    <canvas id="throughput-chart"></canvas>
-                                </div>
+                            <div class="chart-wrapper-small">
+                                <canvas id="throughput-chart"></canvas>
                             </div>
                         </div>
                     </div>
