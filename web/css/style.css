@@ -353,9 +353,16 @@ body {
 .packet-list table {
     width: 100%;
     table-layout: fixed;
-    border-collapse: collapse;
+    border-collapse: separate;
+    border-spacing: 0;
     font-size: 0.82em;
     font-family: 'SF Mono', Menlo, monospace;
+}
+
+.packet-list thead {
+    position: sticky;
+    top: 0;
+    z-index: 20;
 }
 
 .packet-list th {
@@ -371,7 +378,7 @@ body {
     font-size: 0.9em;
     text-transform: uppercase;
     letter-spacing: 0.02em;
-    z-index: 10;
+    z-index: 20;
 }
 
 .packet-list td {
